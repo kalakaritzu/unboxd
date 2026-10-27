@@ -1,0 +1,2109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unboxd</title>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<link rel="icon" href="assets/logo/unboxd-icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&display=optional">
+<style>
+  :root { --bg:#100f14; --panel:#1a1923; --panel2:#262431; --text:#ffffff; --muted:#817e8f; --accent:#806cf5; --line:#2e2c3a; --green:#26ff85; --ink:#030826; --red:#f05f75; }
+  * { box-sizing:border-box; }
+  html { scrollbar-gutter:stable; }
+  html,body { margin:0; background:var(--bg); color:var(--text); font-family:Inter,system-ui,sans-serif; }
+  h1 { margin:0; font-size:22px; } h1 span { color:var(--accent); }
+  body { display:flex; min-height:100vh; }
+  /* sidebar: a slim icon rail that opens over the page (labels appear to the right) while the pointer is on it */
+  body { padding-left:68px; }                      /* the rail opens over the page without moving it */
+  #side { position:fixed; left:0; top:0; bottom:0; width:68px; overflow:hidden; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; align-items:stretch; padding:12px 8px; gap:6px; z-index:30; transition:width .18s ease, box-shadow .18s ease; }
+  #side:hover, #side.kbd { width:210px; box-shadow:6px 0 24px rgba(0,0,0,.45); }
+  #side .logo { font-size:20px; font-weight:800; text-align:center; margin:2px 0 12px; letter-spacing:-.5px; white-space:nowrap; } #side .logo span { color:var(--accent); }
+  #side .sp { flex:1; }
+  .nav { position:relative; display:flex; flex-direction:row; align-items:center; gap:16px; height:44px; padding:0 0 0 14px; border:0; background:none; color:var(--muted); border-radius:4px; cursor:pointer; font:inherit; font-size:14px; white-space:nowrap; text-align:left; }
+  .nav svg { flex:none; width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .nav .t { opacity:0; transition:opacity .12s ease; }
+  #side:hover .nav .t, #side.kbd .nav .t { opacity:1; transition-delay:.06s; }
+  .nav:hover { color:var(--text); background:var(--panel2); }
+  .nav.on { color:var(--accent); background:var(--panel2); }
+  .nav.on::before { content:""; position:absolute; left:-8px; top:10px; bottom:10px; width:3px; border-radius:0 3px 3px 0; background:var(--accent); }
+  .nav .badge { position:absolute; top:3px; left:30px; min-width:16px; height:16px; padding:0 4px; border-radius:4px; background:var(--accent); color:#fff; font-size:10px; font-weight:700; line-height:16px; text-align:center; }
+  .nav .badge:empty { display:none; }
+  #side .wallet { text-align:center; font-size:12px; font-weight:700; color:var(--accent); background:var(--panel2); border-radius:4px; padding:6px 2px; margin:0 0 10px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; height:38px; }
+  #side .wallet small { display:block; height:11px; line-height:11px; font-size:9px; font-weight:500; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; opacity:0; transition:opacity .12s ease; }
+  #side:hover .wallet small, #side.kbd .wallet small { opacity:1; transition-delay:.06s; }
+  #content { flex:1; min-width:0; }
+  .view { display:none; } .view.on { display:block; } main.view.on { display:flex; }
+  .setting { display:flex; align-items:center; gap:16px; padding:14px 0; border-bottom:1px solid var(--line); }
+  .setting:last-child { border-bottom:0; } .setting .d { flex:1; } .setting .d b { display:block; font-size:14px; margin-bottom:2px; } .setting .d span { font-size:12px; color:var(--muted); }
+  .setting button { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:7px 16px; cursor:pointer; min-width:64px; }
+  .setting button.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+  @media (max-width:700px){      /* phones: no hover, so the rail becomes a bottom bar that keeps its labels */
+    body, body.sideOpen { padding-left:0; flex-direction:column-reverse; }
+    #side { left:0; right:0; top:auto; bottom:0; width:auto; height:62px; flex-direction:row; padding:4px 6px; border-right:0; border-top:1px solid var(--line); overflow:visible; }
+    #side:hover, #side.kbd { width:auto; box-shadow:none; }
+    #side .logo, #side .sp { display:none; }
+    .nav { flex:1; flex-direction:column; justify-content:center; gap:2px; height:auto; padding:6px 2px; font-size:10px; }
+    .nav .t { opacity:1; }
+    .nav .badge { left:auto; right:12%; top:2px; }
+    .nav.on::before { left:20%; right:20%; top:-4px; bottom:auto; width:auto; height:3px; border-radius:0 0 3px 3px; }
+    #side .wallet { position:absolute; left:6px; bottom:66px; margin:0; padding:4px 8px; }
+    main, #v-upgrader { padding-bottom:84px !important; }
+  }
+  .case .price { display:block; margin-top:3px; font-size:10px; color:var(--muted); } .case .price.free { color:#5fd38d; font-weight:700; }
+  #keybar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:12px; font-size:13px; color:var(--muted); }
+  #keybar b { color:var(--text); }
+  #keybar button, .sellbtn, #sellAll { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:8px 14px; cursor:pointer; font:inherit; font-size:13px; }
+  #keybar button:hover, .sellbtn:hover, #sellAll:hover { border-color:var(--accent); }
+  #keybar button:disabled { opacity:.45; cursor:default; border-color:var(--line); }
+  #keybar .msg { color:#ff7a7a; }
+  #invTop { display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap; } #invTop .tot { color:var(--muted); font-size:13px; flex:1; } #invTop .tot b { color:#5fd38d; }
+  /* inventory, laid out like the CS2 one: a grid of item tiles, a filter bar on top, the selected item's details on the right */
+  #invBar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  #invBar h2 { margin:0; } #invTotal { color:var(--muted); font-size:13px; } #invTotal b { color:#5fd38d; }
+  #invBar .grow { flex:1; }
+  #invSearch, #invSort { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:8px 12px; font:inherit; font-size:13px; }
+  #invSearch { width:220px; } #invSearch:focus, #invSort:focus { outline:none; border-color:var(--accent); }
+  #invFilters { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { background:var(--panel); color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:6px 14px; font:inherit; font-size:12px; cursor:pointer; }
+  .chip:hover { color:var(--text); } .chip.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+  #invLayout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:18px; align-items:start; }
+  #invGrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(148px, 1fr)); gap:10px; align-content:start; }
+  .icard { position:relative; background:linear-gradient(180deg, var(--panel) 40%, color-mix(in srgb, var(--c) 16%, var(--panel))); border:1px solid var(--line); border-radius:4px; padding:8px 8px 0; cursor:pointer; overflow:hidden; display:flex; flex-direction:column; }
+  .icard::after { content:""; position:absolute; left:0; right:0; bottom:0; height:4px; background:var(--c); }
+  .icard:hover { border-color:color-mix(in srgb, var(--c) 70%, #fff 0%); transform:translateY(-1px); }
+  .icard.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .icard .top { display:flex; justify-content:space-between; align-items:center; font-size:10px; min-height:14px; color:var(--muted); }
+  .icard .st { color:#cf6a32; font-weight:700; } .icard .wr { margin-left:auto; font-weight:700; letter-spacing:.04em; }
+  .icard img { width:100%; height:92px; object-fit:contain; margin:4px 0; }
+  .icard .wn { font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .icard .sn { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .icard .pr { font-size:11px; color:#5fd38d; padding:3px 0 10px; font-variant-numeric:tabular-nums; }
+  #invDetail, #ctDetail { position:sticky; top:72px; background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:16px; display:flex; flex-direction:column; gap:10px; min-height:180px; }
+  #invDetail .hint, #ctDetail .hint { color:var(--muted); font-size:13px; margin:auto; text-align:center; padding:30px 10px; }
+  #invDetail .dimg, #ctDetail .dimg { background:radial-gradient(closest-side, color-mix(in srgb, var(--c) 30%, transparent), transparent); }
+  #invDetail img, #ctDetail img { width:100%; height:170px; object-fit:contain; }
+  #invDetail .dw, #ctDetail .dw { font-size:12px; color:var(--muted); } #invDetail .dn, #ctDetail .dn { font-size:20px; font-weight:700; line-height:1.2; } #invDetail .dn .st, #ctDetail .dn .st { color:#cf6a32; }
+  #invDetail .dr, #ctDetail .dr { font-size:13px; font-weight:600; color:var(--c); }
+  #invDetail dl, #ctDetail dl { margin:4px 0; display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:12px; } #invDetail dt, #ctDetail dt { color:var(--muted); } #invDetail dd, #ctDetail dd { margin:0; text-align:right; }
+  #invDetail dd.val, #ctDetail dd.val { color:#5fd38d; font-weight:700; }
+  #invDetail .btns, #ctDetail .btns { display:flex; gap:8px; } #invDetail .btns button, #ctDetail .btns button { flex:1; background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:10px 6px; cursor:pointer; font:inherit; font-size:13px; }
+  #invDetail .btns button:hover, #ctDetail .btns button:hover { border-color:var(--accent); } #invDetail .btns button.sell { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+  @media (max-width:1000px){ #invLayout, #ctLayout { grid-template-columns:1fr; } #invDetail, #ctDetail { position:static; order:-1; } }
+  /* upgrader */
+  .uppanel { background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:14px; display:flex; flex-direction:column; gap:10px; min-height:0; }
+  .uppanel h2 { margin:0; display:flex; align-items:center; gap:10px; } .uppanel h2 .sum { margin-left:auto; font-size:12px; color:var(--muted); text-transform:none; letter-spacing:0; font-weight:500; } .uppanel h2 .sum b { color:#5fd38d; }
+  .upbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .upbar input, .upbar select { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:7px 10px; font:inherit; font-size:12px; min-width:0; }
+  .upbar input { flex:1; } .upbar input:focus, .upbar select:focus { outline:none; border-color:var(--accent); }
+  .upgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(112px, 1fr)); grid-auto-rows:max-content; gap:8px; max-height:330px; overflow:auto; padding:2px; align-content:start; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
+  .upgrid .icard { padding:6px 6px 0; } .upgrid .icard img { height:58px; margin:2px 0; } .upgrid .icard .sn { font-size:11px; } .upgrid .icard .wn { font-size:9px; } .upgrid .icard .pr { font-size:10px; padding:2px 0 8px; }
+  .icard.pick { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .mults { display:flex; gap:6px; flex-wrap:wrap; } .mults .chip { padding:4px 10px; }
+  /* the dial: a full ring with the win slice; the white pointer travels round it and stops where the roll landed */
+  #upGrid { display:grid; grid-template-columns:minmax(0,1fr) minmax(340px,470px) minmax(0,1fr); gap:18px; align-items:start; }
+  #upCenter { display:flex; flex-direction:column; align-items:center; gap:14px; position:sticky; top:72px; }
+  #upGo { width:min(100%,320px); background:var(--accent); color:#fff; border:0; border-radius:4px; padding:14px; font:inherit; font-size:17px; font-weight:800; cursor:pointer; }
+  #upGo:disabled { opacity:.35; cursor:default; }
+  #upSummary { font-size:13px; color:var(--muted); text-align:center; min-height:18px; } #upSummary b { color:var(--text); }
+  @media (max-width:1280px){ #upGrid { grid-template-columns:1fr 1fr; } #upCenter { grid-column:1/-1; order:-1; position:static; } }
+  @media (max-width:800px){ #upGrid { grid-template-columns:1fr; } }
+  /* case contents */
+  #ctBar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:12px 16px; }
+  #ctBar img { height:64px; filter:drop-shadow(0 6px 8px rgba(0,0,0,.5)); } #ctBar .ctn { font-size:20px; font-weight:700; } #ctBar .cts { font-size:12px; color:var(--muted); margin-top:2px; }
+  #ctBar .grow { flex:1; } #ctCase { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:8px 12px; font:inherit; font-size:13px; max-width:240px; }
+  #ctBar button { background:var(--accent); color:#fff; border:0; border-radius:4px; padding:10px 18px; font:inherit; font-weight:700; cursor:pointer; }
+  #ctLayout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:18px; align-items:start; }
+  #contents .tier { margin-bottom:22px; }
+  #contents .th { display:flex; align-items:baseline; gap:10px; padding-bottom:8px; margin-bottom:10px; border-bottom:2px solid var(--c); }
+  #contents .th b { color:var(--c); font-size:15px; } #contents .th span { color:var(--muted); font-size:12px; } #contents .th .pct { margin-left:auto; color:var(--text); font-weight:700; font-size:14px; }
+  #contents .cgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(148px, 1fr)); gap:10px; }
+  #contents .more { background:var(--panel); color:var(--muted); border:1px dashed var(--line); border-radius:4px; cursor:pointer; font:inherit; font-size:13px; min-height:90px; }
+  #contents .more:hover { color:var(--text); border-color:var(--accent); }
+  /* keys: a shop on the left, what you own on the right */
+  #keysLayout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:22px; align-items:start; }
+  #keysBar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; } #keysBar h2 { margin:0; } #keysBar .grow { flex:1; }
+  #keySearch, #keySort { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:8px 12px; font:inherit; font-size:13px; }
+  #keySearch { width:200px; } #keySearch:focus, #keySort:focus { outline:none; border-color:var(--accent); }
+  #keysFilters { display:flex; gap:6px; margin-bottom:16px; }
+  #keysGrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:16px; }
+  .keycard { position:relative; background:var(--panel); border-radius:4px; padding:16px 16px 14px; display:flex; flex-direction:column; gap:10px; overflow:hidden; }
+  .keycard::before { content:""; position:absolute; left:0; right:0; top:0; height:150px; background:radial-gradient(ellipse 60% 70% at 50% 45%, color-mix(in srgb, var(--k) 38%, transparent), transparent); pointer-events:none; }
+  .keycard img.key { position:relative; width:100%; height:112px; object-fit:contain; filter:drop-shadow(0 8px 10px rgba(0,0,0,.5)); transform:rotate(-6deg); }
+  .keycard .own { position:absolute; top:10px; right:10px; background:var(--accent); color:#fff; font-weight:700; font-size:12px; border-radius:4px; padding:1px 9px; }
+  .keycard .kn { position:relative; font-weight:700; font-size:17px; line-height:1.15; }
+  .keycard .kc { display:flex; align-items:center; gap:4px; min-height:30px; } .keycard .kc img { height:28px; width:34px; object-fit:contain; } .keycard .kc span { font-size:11px; color:var(--muted); margin-left:4px; }
+  .keycard .kbuy { display:flex; align-items:center; gap:8px; margin-top:2px; }
+  .step { display:flex; align-items:center; background:var(--panel2); border-radius:4px; } .step button { width:28px; height:34px; background:none; border:0; color:var(--text); font-size:16px; cursor:pointer; border-radius:4px; } .step button:hover:not(:disabled) { color:var(--accent); } .step button:disabled { opacity:.3; cursor:default; }
+  .step b { min-width:24px; text-align:center; font-variant-numeric:tabular-nums; font-size:14px; }
+  .keycard .buy { flex:1; height:34px; background:var(--accent); color:#fff; border:0; border-radius:4px; font:inherit; font-weight:700; font-size:14px; cursor:pointer; font-variant-numeric:tabular-nums; }
+  .keycard .buy:hover:not(:disabled) { filter:brightness(1.1); } .keycard .buy:disabled { background:var(--panel2); color:var(--muted); cursor:default; }
+  #keysSide { position:sticky; top:72px; background:var(--panel); border-radius:4px; padding:18px; display:flex; flex-direction:column; gap:14px; }
+  #keysSide .bal small { display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); } #keysSide .bal b { font-family:Inter,system-ui,sans-serif; font-size:34px; color:var(--accent); line-height:1.1; font-variant-numeric:tabular-nums; }
+  #keysSide h3 { margin:4px 0 0; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:600; }
+  #keysSide .hint { font-size:13px; color:var(--muted); line-height:1.45; }
+  #keysSide .ok { display:flex; align-items:center; gap:10px; } #keysSide .ok img { width:46px; height:36px; object-fit:contain; } #keysSide .ok .t { flex:1; min-width:0; font-size:13px; font-weight:600; line-height:1.2; } #keysSide .ok .t span { display:block; font-weight:400; font-size:11px; color:var(--muted); }
+  #keysSide .ok .n { font-family:Inter,system-ui,sans-serif; font-size:20px; font-weight:700; color:var(--accent); }
+  @media (max-width:1000px){ #keysLayout { grid-template-columns:1fr; } #keysSide { position:static; order:-1; } }
+  main { margin:0; padding:22px 28px 60px; display:flex; flex-direction:column; gap:20px; }
+  #v-settings { max-width:760px; }       /* reading views stay a comfortable width, next to the sidebar */
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 10px; font-weight:600; }
+
+  /* case picker: a grid of case cards (search + sort on top) next to the selected case's panel, like the CS2 container screen */
+  #caseLayout { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:18px; align-items:start; }
+  #caseBar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; } #caseBar h2 { margin:0; } #caseBar .grow { flex:1; }
+  #caseSearch, #caseSort { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:8px 12px; font:inherit; font-size:13px; }
+  #caseSearch { width:200px; } #caseSearch:focus, #caseSort:focus { outline:none; border-color:var(--accent); }
+  #cases { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
+  .case { position:relative; padding:12px 8px 10px; background:var(--panel); border:1px solid var(--line); border-radius:4px; cursor:pointer; text-align:center; display:flex; flex-direction:column; align-items:center; transition:transform .12s ease, border-color .12s ease; }
+  .case:hover { border-color:#4a5268; transform:translateY(-2px); }
+  .case.sel { border-color:var(--accent); background:linear-gradient(180deg, var(--panel2), var(--panel)); box-shadow:0 0 0 1px var(--accent) inset; }
+  .case img { width:100%; height:96px; object-fit:contain; filter:drop-shadow(0 6px 8px rgba(0,0,0,.45)); }
+  .case .cn { font-size:12px; margin-top:6px; line-height:1.25; min-height:30px; display:flex; align-items:center; }
+  .case .price { margin-top:4px; font-size:11px; color:var(--muted); } .case .price.free { color:#5fd38d; font-weight:700; letter-spacing:.06em; }
+  .case .own { position:absolute; top:6px; right:6px; background:var(--accent); color:#fff; font-size:10px; font-weight:700; border-radius:4px; padding:1px 7px; } .case .own:empty { display:none; }
+  #casePanel { position:sticky; top:72px; background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:16px; display:flex; flex-direction:column; gap:12px; }
+  #casePanel .cimg { background:radial-gradient(closest-side, rgba(128,108,245,.16), transparent); text-align:center; } #casePanel .cimg img { height:150px; max-width:100%; object-fit:contain; filter:drop-shadow(0 8px 10px rgba(0,0,0,.5)); }
+  #casePanel .cname { font-size:20px; font-weight:700; text-align:center; } #casePanel .csub { font-size:12px; color:var(--muted); text-align:center; margin-top:-8px; }
+  #keybar { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--muted); text-align:center; }
+  #casePanel #open { width:100%; }
+  #casePanel h3 { margin:2px 0 0; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:600; }
+  #cpContents .grp { margin-bottom:8px; } #cpContents .grp .items { gap:4px; } #cpContents .grp .it { width:52px; padding:3px; } #cpContents .grp .it img { height:30px; } #cpContents .grp .it div { display:none; }
+  @media (max-width:1000px){ #caseLayout { grid-template-columns:1fr; } #casePanel { position:static; order:-1; } }
+
+  /* roulette */
+  #stage { position:relative; background:linear-gradient(180deg, #161922, #0f1117); border:1px solid var(--line); border-radius:4px; overflow:hidden; height:212px; transition:height .35s cubic-bezier(.2,.8,.2,1); box-shadow:inset 0 0 40px rgba(0,0,0,.55); --rh:210px; }
+  #reels { display:flex; flex-direction:column; }
+  .reel { position:relative; overflow:hidden; height:var(--rh); } .reel + .reel { border-top:1px solid var(--line); }
+  .strip { display:flex; height:100%; align-items:center; will-change:transform; }
+  #stage.multi .tile { height:calc(var(--rh) - 10px); } #stage.multi .tile .in { padding:4px; } #stage.multi .tile img { width:152px; height:calc(var(--rh) - 26px); }
+  #countBar { display:flex; align-items:center; justify-content:center; gap:8px; font-size:12px; color:var(--muted); }
+  #counts { display:flex; gap:4px; } #counts button { width:30px; height:30px; border-radius:4px; border:1px solid var(--line); background:var(--panel2); color:var(--text); font:inherit; font-weight:700; cursor:pointer; }
+  #counts button.on { background:var(--accent); color:#fff; border-color:var(--accent); } #counts button:disabled { opacity:.3; cursor:default; }
+  .tile { flex:none; width:172px; height:180px; margin:0; padding:0 6px; }
+  .tile .in { height:100%; background:radial-gradient(ellipse 70% 60% at 50% 50%, color-mix(in srgb, var(--c) 55%, transparent), transparent 75%), var(--panel2); border-radius:4px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:6px; }
+  .tile .in { padding-top:14px; }
+  .tile img { width:152px; height:116px; object-fit:contain; }
+  .tile .n { font-size:11px; text-align:center; margin-top:6px; line-height:1.2; color:var(--muted); }
+  #marker { position:absolute; left:50%; top:0; bottom:0; width:2px; margin-left:-1px; background:#ffffff; box-shadow:0 0 10px rgba(255,255,255,.7); z-index:2; }
+  #marker::before, #marker::after { content:""; position:absolute; left:50%; margin-left:-7px; border:7px solid transparent; }
+  #marker::before { top:0; border-top-color:#ffffff; } #marker::after { bottom:0; border-bottom-color:#ffffff; }
+  #stage::before, #stage::after { content:""; position:absolute; top:0; bottom:0; width:120px; z-index:1; pointer-events:none; }
+  #stage::before { left:0; background:linear-gradient(90deg,var(--panel),transparent); }
+  #stage::after { right:0; background:linear-gradient(270deg,var(--panel),transparent); }
+  #stage .idle { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); z-index:1; }
+
+  #controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  #open { background:var(--accent); color:#fff; border:0; border-radius:4px; padding:12px 28px; font-size:16px; font-weight:700; cursor:pointer; }
+  #open:disabled { opacity:.5; cursor:default; }
+  #skip { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:12px 18px; cursor:pointer; }
+  #skip:disabled { opacity:.4; cursor:default; }
+  #opened { color:var(--muted); font-size:13px; }
+
+  /* result */
+  #result { display:none; position:fixed; inset:0; background:rgba(8,9,13,.96); z-index:10; align-items:center; justify-content:center; padding:20px; }
+  #result.show { display:flex; }
+  #result.preload { display:flex; visibility:hidden; pointer-events:none; }   /* built during the spin so the card is ready when it lands */
+  #card { background:none; border:0; padding:0; max-width:460px; width:100%; text-align:center; }
+  #card img { width:100%; max-height:260px; object-fit:contain; }
+  #card .nm { font-size:20px; font-weight:700; margin-top:8px; }
+  #card .rar { color:var(--c); font-size:13px; font-weight:600; margin-top:2px; }
+  #card .meta { margin-top:14px; display:grid; grid-template-columns:1fr; gap:8px; text-align:center; }
+  #card .meta div { background:none; padding:4px 10px; font-size:12px; color:var(--muted); }
+  #card .meta b { display:block; color:var(--text); font-size:14px; margin-top:2px; font-variant-numeric:tabular-nums; }
+  #card .st { color:#cf6a32; font-weight:700; }
+  #card .note { color:#e0b050; font-size:12px; margin-top:10px; }
+  #card .btns { display:flex; gap:10px; justify-content:center; margin-top:72px; }
+  #card button { background:var(--accent); color:#fff; border:0; border-radius:4px; padding:10px 26px; font-weight:700; cursor:pointer; }
+  #card button.alt { background:none; color:var(--muted); border:0; }
+  #card #vis { background:radial-gradient(closest-side, color-mix(in srgb, var(--c) 28%, transparent), transparent); }
+  #card { max-width:560px; } #card.multi { max-width:920px; } #card.multi #vis { display:none; }
+  #card .mgrid { display:flex; flex-wrap:wrap; gap:18px 10px; justify-content:center; }
+  #card .mc { width:170px; }
+  #card .mc .pic { background:radial-gradient(closest-side, color-mix(in srgb, var(--c) 30%, transparent), transparent); }
+  #card .mc img { width:100%; max-height:120px; object-fit:contain; }
+  #card .mc .mn { font-size:13px; font-weight:700; margin-top:6px; line-height:1.2; } #card .mc .mw { font-size:11px; color:var(--muted); margin-top:2px; } #card .mc .mp { font-size:12px; color:var(--accent); font-weight:700; margin-top:4px; }
+  #card .mc .mn, #card .mc .mw, #card .mc .mp { opacity:0; transform:translateY(12px); }
+  #result.show #card .mc .pic img { animation:pop .75s cubic-bezier(.2,.9,.3,1.15) both; animation-delay:calc(var(--i) * .13s); }
+  #result.show #card .mc .mn, #result.show #card .mc .mw, #result.show #card .mc .mp { animation:rise .5s ease-out forwards; animation-delay:calc(.45s + var(--i) * .13s); }
+  #result.closing { animation:fadeOut .35s ease-in forwards; } #result.closing #card { animation:cardOut .35s ease-in forwards; }
+  @keyframes fadeOut { to { opacity:0; } } @keyframes cardOut { to { transform:translateY(18px) scale(.97); } }
+  #card .nm, #card .rar, #card .meta, #card .btns { opacity:0; transform:translateY(12px); }
+  #result.show #card .nm, #result.show #card .rar, #result.show #card .meta, #result.show #card .btns { animation:rise .5s ease-out forwards; }
+  #result.show #card .nm { animation-delay:.45s; } #result.show #card .rar { animation-delay:.55s; }
+  #result.show #card .meta { animation-delay:.65s; } #result.show #card .btns { animation-delay:.05s; }
+  #card #flat { background:radial-gradient(closest-side, color-mix(in srgb, var(--c) 30%, transparent), transparent); }
+  #card #flat img { max-height:300px; }
+  #result.show #card #flat img { animation:pop .75s cubic-bezier(.2,.9,.3,1.15) both; }
+  @keyframes pop { from { opacity:0; transform:translateY(40px) scale(.7) rotate(-4deg); } to { opacity:1; transform:none; } }
+  @keyframes rise { to { opacity:1; transform:none; } }
+  #card #vis { position:relative; height:340px; }
+  #card #flat { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .row { cursor:pointer; } .row:hover { outline:1px solid var(--line); }
+
+  /* loading screen */
+  #loading { position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; }
+  #loading.done { display:none; }
+  #loading .bar { width:min(440px,80vw); height:10px; background:var(--panel2); border-radius:4px; overflow:hidden; }
+  #loading .bar i { display:block; height:100%; width:0; background:var(--accent); transition:width .15s; }
+  #loadMsg { font-size:15px; } #loadSub { font-size:12px; color:var(--muted); min-height:16px; }
+  #loading button { background:var(--panel2); color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:6px 14px; cursor:pointer; }
+
+  /* contents + inventory */
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width:800px){ .cols { grid-template-columns:1fr; } }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:14px; }
+  .grp { margin-bottom:12px; }
+  .grp .gh { font-size:12px; font-weight:600; display:flex; justify-content:space-between; margin-bottom:6px; }
+  .grp .items { display:flex; flex-wrap:wrap; gap:6px; }
+  .grp .it { width:74px; background:radial-gradient(ellipse 70% 60% at 50% 50%, color-mix(in srgb, var(--c) 55%, transparent), transparent 75%), var(--panel2); border-radius:4px; padding:4px; text-align:center; }
+  .grp .it img { width:100%; height:48px; object-fit:contain; }
+  .grp .it div { font-size:9px; color:var(--muted); line-height:1.15; margin-top:2px; }
+  #stats { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  #stats .s { background:var(--panel2); border-radius:4px; padding:5px 9px; font-size:12px; border-left:4px solid var(--c); }
+  #inv { display:flex; flex-direction:column; gap:6px; max-height:420px; overflow:auto; }
+  .row { display:flex; align-items:center; gap:10px; background:var(--panel2); border-radius:4px; padding:6px 10px; border-left:4px solid var(--c); }
+  .row img { width:56px; height:42px; object-fit:contain; }
+  .row .t { flex:1; min-width:0; } .row .t div:first-child { font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .t div:last-child { font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .empty { color:var(--muted); font-size:13px; }
+
+  /* ---- feel: type, states, motion ---- */
+  #open, #upGo, #card .nm { letter-spacing:.02em; } #card .nm { font-size:24px; }
+  button, .nav, .chip, .case, .icard, .keycard { -webkit-tap-highlight-color:transparent; user-select:none; }
+  img { -webkit-user-drag:none; user-select:none; }
+  button, .chip, .case, .icard, .keycard, .nav, select, input { transition:transform .14s ease, border-color .14s ease, background-color .14s ease, color .14s ease, box-shadow .14s ease, filter .14s ease, opacity .14s ease; }
+  button:active:not(:disabled), .chip:active { transform:scale(.97); }
+  #open:hover:not(:disabled), #upGo:hover:not(:disabled), #card button:hover, #ctBar button:hover, .setting button.on:hover, #invDetail .btns button.sell:hover { filter:brightness(1.1); }
+  .icard:hover { transform:translateY(-2px); box-shadow:0 8px 18px -8px color-mix(in srgb, var(--c) 55%, transparent); }
+  button:focus-visible, .nav:focus-visible, .chip:focus-visible, select:focus-visible, input:focus-visible, .case:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  #keybar { min-height:46px; }
+  #casePanel > * { flex-shrink:0; } #casePanel > #cpContents { flex-shrink:1; }
+  #casePanel { max-height:calc(100vh - 88px); } #cpContents { overflow:auto; min-height:0; flex:1; padding-right:2px; }
+  @media (max-width:1000px){ #casePanel { max-height:none; } }
+  #casePanel .cname { min-height:26px; }
+  * { scrollbar-width:thin; scrollbar-color:#323a50 transparent; }
+  ::selection { background:color-mix(in srgb, var(--accent) 40%, transparent); }
+  #content { max-width:1640px; margin-inline:auto; width:100%; }
+  @media (prefers-reduced-motion:reduce){ *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+
+  /* ---- CS.MONEY-style look: top bar, flat tinted cards, purple / neon green / white buttons ---- */
+  body { font-size:14px; font-weight:500; }
+  h2 { color:#bbb9c7; letter-spacing:.06em; }
+  .case, .icard, .keycard, .uppanel, #casePanel, #invDetail, #ctDetail, #ctBar, #keysSide, .tile .in, #stage, .case.sel, .icard.sel { border-color:transparent; }
+  .case, .icard, .keycard, .uppanel, #casePanel, #invDetail, #ctDetail, #ctBar, #keysSide { background-color:rgba(204,210,255,.06); }
+  .case { background:rgba(204,210,255,.06); }
+  .case:hover { background:rgba(204,210,255,.1); border-color:transparent; transform:none; }
+  .case.sel { background:rgba(128,108,245,.16); box-shadow:0 0 0 2px var(--accent) inset; }
+  .icard { background:radial-gradient(ellipse 80% 52% at 50% 44%, color-mix(in srgb, var(--c) 26%, transparent), transparent 72%), rgba(204,210,255,.06); }
+  .icard::after { display:none; }
+  .icard:hover { transform:none; box-shadow:none; background:radial-gradient(ellipse 80% 52% at 50% 44%, color-mix(in srgb, var(--c) 36%, transparent), transparent 72%), rgba(204,210,255,.1); }
+  .icard.sel, .icard.pick { box-shadow:0 0 0 2px var(--accent) inset; }
+  .keycard::before { background:radial-gradient(ellipse 60% 70% at 50% 45%, color-mix(in srgb, var(--k) 30%, transparent), transparent); }
+  #stage { background:rgba(204,210,255,.05); box-shadow:none; }
+  #stage::before { background:linear-gradient(90deg,var(--bg),transparent); } #stage::after { background:linear-gradient(270deg,var(--bg),transparent); }
+  .tile .in { background:radial-gradient(ellipse 70% 60% at 50% 50%, color-mix(in srgb, var(--c) 45%, transparent), transparent 75%), rgba(204,210,255,.07); }
+  #marker { background:#fff; box-shadow:0 0 12px rgba(255,255,255,.6); } #marker::before { border-top-color:#fff; } #marker::after { border-bottom-color:#fff; }
+  input, select, #caseSearch, #caseSort, #invSearch, #invSort, #keySearch, #keySort, .upbar input, .upbar select, #ctCase { background:rgba(204,210,255,.08); border-color:transparent; }
+  input:focus, select:focus { border-color:var(--accent) !important; }
+  .chip { background:rgba(204,210,255,.08); border-color:transparent; color:#bbb9c7; } .chip:hover { background:rgba(204,210,255,.14); } .chip.on { background:var(--accent); color:#fff; }
+  /* buttons: green = money moves, purple = primary, white = secondary */
+  #open, #upGo, #invDetail .btns button.sell, #card button#ok { background:var(--green); color:var(--ink); font-weight:700; }
+  #card button#ok { background:#fff; color:#282633; }
+  #card button.alt { background:none; color:#bbb9c7; } #card button.alt:hover { color:#fff; }
+  #open:disabled, #upGo:disabled { background:rgba(204,210,255,.1); color:var(--muted); opacity:1; }
+  #ctBar button, .keycard .buy, #keybar button:hover { background:var(--accent); color:#fff; }
+  .keycard .buy:disabled { background:rgba(204,210,255,.08); color:var(--muted); }
+  #skip, #keybar button, .sellbtn, #sellAll, #invDetail .btns button, #ctDetail .btns button, .step { background:#fff; color:#282633; border:0; font-weight:600; }
+  #skip:hover, #keybar button:hover { filter:brightness(.92); background:#fff; color:#282633; } #skip:disabled { background:rgba(204,210,255,.08); color:var(--muted); opacity:1; }
+  .step { background:rgba(204,210,255,.1); color:#fff; } .step button, .step b { color:#fff; }
+  #counts button { background:rgba(204,210,255,.1); border:0; } #counts button.on { background:var(--accent); }
+  #wallet, #keysSide .bal b, .keycard .kp b, .case .own { color:var(--green); }
+  .case .own, .icard .wr { } .case .own { background:var(--accent); color:#fff; }
+  .icard .pr, #invDetail dd.val, #ctDetail dd.val, #upInfo .pct, #invTotal b, #invTop .tot b { color:var(--green); }
+  #card .mc .mp, .keycard .own { color:#fff; } .keycard .own { background:var(--accent); }
+  #keybar .msg { color:var(--red); }
+  /* the bar across the top (bigger screens): logo, links, balance */
+  @media (min-width:701px){
+    body { padding-left:0; flex-direction:column; }
+    #side, #side:hover, #side.kbd { position:sticky; top:0; left:auto; bottom:auto; width:100%; height:56px; flex:none; flex-direction:row; align-items:center; gap:2px; padding:0 24px; overflow:visible; background:rgba(16,15,20,.92); backdrop-filter:blur(8px); border-right:0; border-bottom:1px solid var(--line); box-shadow:none; }
+    #side .logo { margin:0 22px 0 -6px; font-size:20px; letter-spacing:-.3px; }
+    .nav { height:36px; padding:0 14px; gap:8px; font-weight:600; }
+    .nav .t { opacity:1; transition:none; }
+    .nav:hover { background:rgba(204,210,255,.08); } .nav.on { background:none; color:#fff; }
+    .nav.on::before { left:14px; right:14px; top:auto; bottom:-10px; width:auto; height:2px; border-radius:0; }
+    .nav .badge { left:auto; right:2px; top:0; }
+    #side .wallet { margin:0 8px 0 0; height:34px; padding:0 14px; display:flex; align-items:center; background:rgba(38,255,133,.1); border-radius:4px; font-size:14px; font-weight:700; }
+    #side .wallet small { display:none; }
+    #content { flex:1; }
+    #v-upgrader { min-height:calc(100vh - 56px); }
+  }
+
+  /* ---- v2: closer to CS.MONEY (page #1c1a24, cards #312f3d, bar #100f14), and quieter ---- */
+  :root { --bg:#1c1a24; --panel:#282633; --panel2:#312f3d; --line:#312f3d; --muted:#8f8c9e; }
+  body { font-size:13px; }
+  h2 { font-size:12px; letter-spacing:.04em; text-transform:none; color:#bbb9c7; font-weight:600; }
+  /* things that only explained themselves are gone: the information is in the pictures and the numbers */
+  #opened, #cpSub, #cpContents, #casePanel h3, #ctSub, #keysSide, #upSummary, #caseBar h2, #keysBar h2, #invBar h2, .hint, #idle { display:none !important; }
+  #keysLayout { grid-template-columns:1fr; }
+  #invLayout:has(#invDetail .hint), #ctLayout:has(#ctDetail .hint) { grid-template-columns:minmax(0,1fr); }
+  #invDetail:has(.hint), #ctDetail:has(.hint) { display:none; }
+  #invTotal b { color:#fff; font-size:15px; }
+  #casePanel { max-height:none; gap:10px; }
+  #casePanel .cname { font-size:17px; font-weight:600; }
+  #keybar { min-height:38px; gap:8px; } #keybar .kn { color:#fff; font-size:15px; }
+  #countBar { justify-content:flex-start; }
+
+  .case, .icard, .keycard { background-color:#312f3d; }
+  .case { background:#312f3d; } .case:hover { background:#3a3849; }
+  .case.sel { background:#3a3849; box-shadow:0 0 0 2px var(--accent) inset; }
+  .case .cn { font-size:12px; font-weight:500; color:#bbb9c7; min-height:30px; } .case .price { font-size:12px; color:#fff; font-weight:500; margin-top:2px; } .case .price.free { color:var(--green); }
+  .icard { background:radial-gradient(ellipse 80% 52% at 50% 44%, color-mix(in srgb, var(--c) 22%, transparent), transparent 72%), #312f3d; }
+  .icard:hover { background:radial-gradient(ellipse 80% 52% at 50% 44%, color-mix(in srgb, var(--c) 32%, transparent), transparent 72%), #3a3849; }
+  .icard .wn { color:#8f8c9e; font-size:10px; } .icard .sn { font-size:12px; font-weight:500; color:#bbb9c7; } .icard .pr { color:#fff; font-size:13px; font-weight:500; }
+  .icard .wr, .icard .top { font-size:10px; font-weight:600; color:#bbb9c7; }
+  .keycard { padding:14px; gap:8px; } .keycard .kn { font-size:14px; font-weight:600; color:#bbb9c7; }
+  #casePanel, #invDetail, #ctDetail, .uppanel, #ctBar { background:#282633; }
+  #stage { background:#282633; } #stage::before { background:linear-gradient(90deg,#282633,transparent); } #stage::after { background:linear-gradient(270deg,#282633,transparent); }
+  .tile .in { background:radial-gradient(ellipse 70% 60% at 50% 50%, color-mix(in srgb, var(--c) 42%, transparent), transparent 75%), #312f3d; }
+  input, select, #caseSearch, #caseSort, #invSearch, #invSort, #keySearch, #keySort, .upbar input, .upbar select, #ctCase { background:#282633; }
+  .chip { background:#282633; color:#bbb9c7; } .chip:hover { background:#312f3d; color:#fff; } .chip.on { background:var(--accent); color:#fff; }
+  #counts button { background:#312f3d; color:#bbb9c7; } #counts button.on { background:var(--accent); color:#fff; }
+  .step { background:#3a3849; }
+  /* the bar */
+  @media (min-width:701px){
+    #side, #side:hover, #side.kbd { background:#100f14; backdrop-filter:none; border-bottom:0; height:64px; padding:0 32px; }
+    #side .logo { font-size:19px; margin-right:28px; }
+    .nav { height:64px; padding:0 18px; border-radius:0; font-size:14px; font-weight:500; color:#bbb9c7; }
+    .nav svg { display:none; }
+    .nav:hover { background:none; color:#fff; } .nav.on { color:#9f8fff; background:none; }
+    .nav.on::before { display:none; }
+    .nav .badge { position:static; margin-left:4px; background:none; color:#fff; min-width:0; padding:0; font-size:11px; opacity:.7; }
+    .nav[data-view=settings] .t { font-size:0; } .nav[data-view=settings] svg { display:block; }
+    #side .wallet { background:#282633; color:#fff; border-radius:4px; height:32px; font-weight:600; font-size:14px; } #side .wallet { color:var(--green); }
+    #v-upgrader { min-height:calc(100vh - 64px); }
+    #invDetail, #ctDetail, #casePanel, #keysSide { top:80px; }
+  }
+  /* contents: just the tiers and their skins */
+  #ctBar { padding:10px 14px; } #ctBar .ctn { display:none; } #ctBar img { height:52px; }
+  #ctCase { max-width:none; field-sizing:content; font-size:20px; font-weight:600; background:none; padding:6px 4px; cursor:pointer; }
+  #ctBar .grow { display:none; } #ctBar { justify-content:flex-start; } #ctBar button { margin-left:auto; }
+  #contents .tier { margin-bottom:26px; }
+  #contents .th { border-bottom:0; padding-bottom:0; margin-bottom:12px; }
+  #contents .th b { font-size:14px; font-weight:600; } #contents .th span:not(.pct) { display:none; } #contents .th .pct { color:#8f8c9e; font-weight:500; font-size:13px; }
+  #contents .cgrid { grid-template-columns:repeat(auto-fill, minmax(132px, 1fr)); gap:8px; }
+  #contents .icard .top { display:none; } #contents .icard { padding-top:10px; } #contents .icard .pr { padding-bottom:10px; }
+  /* an item on its own page */
+  #v-item { gap:14px; } .back { align-self:flex-start; background:none; border:0; color:#bbb9c7; font:inherit; font-size:14px; font-weight:500; cursor:pointer; padding:6px 2px; } .back:hover { color:#fff; }
+  #itPage { display:grid; grid-template-columns:minmax(0,1fr) 400px; gap:20px; align-items:stretch; max-width:1240px; }
+  #itPage .big { background:radial-gradient(closest-side, color-mix(in srgb, var(--c) 34%, transparent), transparent 82%), #282633; border-radius:4px; display:flex; align-items:center; justify-content:center; min-height:min(62vh, 520px); padding:24px; }
+  #itPage .big img { width:100%; max-height:min(52vh, 440px); object-fit:contain; filter:drop-shadow(0 18px 24px rgba(0,0,0,.5)); }
+  #itPage .side { display:flex; flex-direction:column; gap:16px; background:#282633; border-radius:4px; padding:22px; }
+  #itPage .w { font-size:13px; color:#8f8c9e; } #itPage .n { font-size:30px; font-weight:700; line-height:1.15; margin-top:2px; } #itPage .n .st { color:#cf6a32; font-size:.6em; vertical-align:middle; }
+  #itPage .r { font-size:14px; font-weight:600; color:var(--c); margin-top:6px; }
+  #itPage .row { background:none; border:0; padding:0; border-radius:0; cursor:default; outline:0 !important; } #itPage .row::before, #itPage .row::after { display:none; }
+  #itPage .price { font-size:28px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; }
+  #itPage .row { display:flex; justify-content:space-between; font-size:13px; color:#8f8c9e; } #itPage .row b { color:#fff; font-weight:500; }
+  #itPage .wears { display:flex; flex-wrap:wrap; gap:6px; } #itPage .wears .chip { padding:7px 12px; font-size:12px; } #itPage .wears .chip.on { background:var(--accent); }
+  #itPage button.sell { background:var(--green); color:var(--ink); border:0; border-radius:4px; padding:14px; font:inherit; font-size:15px; font-weight:700; cursor:pointer; }
+  #itPage .side { justify-content:space-between; gap:22px; padding:26px; }
+  #itPage .conds { display:flex; flex-direction:column; gap:6px; }
+  #itPage .cond { display:flex; justify-content:space-between; align-items:center; background:#312f3d; color:#bbb9c7; border:0; border-radius:4px; padding:14px 16px; font:inherit; font-size:15px; cursor:pointer; text-align:left; }
+  #itPage .cond:hover { background:#3a3849; color:#fff; } #itPage .cond b { color:#fff; font-weight:600; font-variant-numeric:tabular-nums; }
+  #itPage .cond.on { background:var(--accent); color:#fff; }
+  #itPage .facts { display:flex; flex-direction:column; gap:8px; padding-top:4px; }
+  #itPage .n { font-size:34px; } #itPage .w { font-size:14px; letter-spacing:.02em; }
+  .back { background:#282633; border-radius:4px; padding:8px 16px; color:#fff; } .back:hover { background:#312f3d; }
+  #itPage .big { min-height:520px; }
+  @media (max-width:1000px){ #itPage { grid-template-columns:1fr; } }
+  /* the reveal, in the site's style: a tint of the rarity colour behind the weapon, plain text, the same green and white buttons */
+  #result { background:radial-gradient(ellipse 65% 55% at 50% 40%, color-mix(in srgb, var(--c, #806cf5) 20%, #100f14), #100f14 72%); }
+  #card #vis { background:none; } #card #flat { background:radial-gradient(closest-side, color-mix(in srgb, var(--c) 46%, transparent) 0%, color-mix(in srgb, var(--c) 16%, transparent) 55%, transparent 100%); }
+  #card .nm { font-size:30px; font-weight:700; margin-top:14px; letter-spacing:-.01em; }
+  #card .sub { display:flex; justify-content:center; align-items:center; gap:10px; margin-top:8px; font-size:14px; color:#8f8c9e; opacity:0; transform:translateY(12px); }
+  #card .sub .rar { margin:0; color:var(--c); font-weight:600; } #card .sub span + span::before { content:""; display:inline-block; width:3px; height:3px; border-radius:50%; background:#8f8c9e; vertical-align:middle; margin-right:10px; }
+  #result.show #card .sub { animation:rise .5s ease-out forwards; animation-delay:.55s; }
+  #card .btns { gap:8px; margin-top:26px; }
+  #card button { min-width:132px; padding:13px 22px; font-size:15px; border-radius:4px; }
+  #card #sellNow { background:var(--green); color:var(--ink); font-weight:700; } #card #sellNow:hover { filter:brightness(1.08); }
+  /* ---- v3: bigger type, and button text that fills its button comfortably ---- */
+  body { font-size:14px; }
+  h2 { font-size:13px; }
+  .nav, #side .wallet { font-size:15px; } #side .logo { font-size:21px; }
+  input, select, #caseSearch, #caseSort, #invSearch, #invSort, #keySearch, #keySort, .upbar input, .upbar select { font-size:14px; padding:9px 12px; }
+  .chip, .mults .chip, #invFilters .chip, #keysFilters .chip { font-size:13px; padding:8px 14px; } .mults .chip { padding:6px 12px; }
+  .case .cn { font-size:13px; } .case .price { font-size:13px; }
+  .icard .top { font-size:11px; } .icard .wn { font-size:11px; } .icard .sn { font-size:14px; } .icard .pr { font-size:14px; }
+  .upgrid .icard .sn { font-size:12px; } .upgrid .icard .wn { font-size:10px; } .upgrid .icard .pr { font-size:12px; }
+  #casePanel .cname { font-size:19px; } #keybar .kn { font-size:16px; } #keybar button { font-size:14px; padding:9px 16px; }
+  #counts button { width:38px; height:34px; font-size:14px; }
+  #open { font-size:18px; padding:15px 28px; } #upGo { font-size:19px; padding:16px; } #skip { font-size:15px; padding:12px 22px; }
+  #ctBar button { font-size:15px; padding:12px 22px; } #sellAll, #clear { font-size:13px; }
+  .keycard .kn { font-size:15px; } .keycard .buy { font-size:15px; height:38px; } .step button { width:32px; height:38px; font-size:18px; } .step b { font-size:15px; min-width:28px; }
+  #contents .th b { font-size:16px; } #contents .th .pct { font-size:14px; } #ctCase { font-size:22px; }
+  .setting .d b { font-size:15px; } .setting button { font-size:14px; padding:9px 20px; }
+  #itPage .w, #itPage .row { font-size:14px; } #itPage .wears .chip { font-size:14px; padding:9px 14px; } #itPage button.sell { font-size:17px; padding:16px; } .back { font-size:15px; }
+  #card button { font-size:17px; min-width:150px; padding:15px 28px; }
+  #card .sub { font-size:15px; }
+  /* several drops: bigger and filling the screen, no tint behind them */
+  #result:has(#card.multi) { background:#100f14; }
+  #card.multi { max-width:1300px; }
+  #card .mgrid { gap:30px 18px; }
+  #card .mc { width:210px; }
+  #card .mc img { max-height:170px; }
+  #card .mc .mn { font-size:16px; margin-top:10px; } #card .mc .mw { font-size:13px; } #card .mc .mp { font-size:15px; margin-top:6px; }
+  #card .mc .pic { background:radial-gradient(closest-side, color-mix(in srgb, var(--c) 40%, transparent), transparent); }
+  #card.multi .btns { margin-top:44px; }
+  /* the key glow fades out completely inside its own box instead of being cut off */
+  .keycard::before { height:190px; background:radial-gradient(ellipse 52% 46% at 50% 38%, color-mix(in srgb, var(--k) 38%, transparent), transparent 100%); }
+  .nav .badge { display:none !important; }
+  @media (min-width:701px){ .nav, #side .wallet { font-size:16px; } #side .logo { font-size:24px; margin-right:34px; } #side .wallet { height:38px; padding:0 18px; } .nav[data-view=settings] svg { width:26px; height:26px; } }
+  #controls { display:none; }
+  #autoBar { display:flex; gap:8px; } #autoBar .chip { flex:1; } #autoBar .chip { background:#312f3d; padding:10px 14px; } #autoBar .chip.on { background:var(--accent); }
+  .sw { width:48px; min-width:0; height:26px; padding:0; border:0; border-radius:4px; background:#3a3849; position:relative; cursor:pointer; }
+  .sw::after { content:""; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:2px; background:#fff; transition:transform .16s ease; }
+  .sw.on { background:var(--accent); } .sw.on::after { transform:translateX(22px); }
+  .rules { margin:2px 0 8px; padding:18px; background:#282633; border-radius:4px; display:flex; flex-direction:column; gap:16px; transition:opacity .15s; } .rules.off { opacity:.4; pointer-events:none; }
+  .rules .r { display:flex; align-items:center; gap:14px; flex-wrap:wrap; } .rules .r > span { width:190px; color:#bbb9c7; }
+  #sellRarities { display:flex; gap:8px; flex-wrap:wrap; } #sellRarities .chip { background:#312f3d; padding:9px 14px; } #sellRarities .chip::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--c); margin-right:8px; } #sellRarities .chip.on { background:var(--accent); } #sellRarities .chip.on::before { background:#fff; }
+  .rules .money { position:relative; } .rules .money::before { content:"$"; position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#8f8c9e; } .rules input { width:120px; padding-left:26px; background:#312f3d; border:0; color:#fff; border-radius:4px; font:inherit; }
+  .sold { color:var(--green); font-weight:600; font-size:16px; margin-top:12px; } #card .mc .mp.sold { color:var(--green); }
+  #side .logo { display:flex; align-items:center; gap:10px; } #side .logo { gap:0; } #side .logo img { height:46px; width:46px; flex:none; } #side .logo b { font-weight:inherit; color:#fff; }
+  @media (max-width:700px){ #side .logo { display:none; } }
+  #loading h1 { display:flex; align-items:center; justify-content:center; gap:12px; } #loading h1 { gap:0; } #loading h1 img { height:84px; }
+  /* keep rolling: a feed of what just dropped, newest first; green = sold, purple outline = kept */
+  #feed { display:none; gap:8px; margin-top:10px; overflow:hidden; } #feed.on { display:flex; }
+  #feed .fd { flex:none; width:118px; background:radial-gradient(ellipse 80% 55% at 50% 40%, color-mix(in srgb, var(--c) 30%, transparent), transparent 75%), #312f3d; border-radius:4px; padding:8px 8px 9px; text-align:center; }
+  #feed .fd.new { animation:fdIn .35s cubic-bezier(.2,.8,.2,1) both; }
+  #feed .fd img { width:100%; height:62px; object-fit:contain; } #feed .fd .n { font-size:12px; color:#bbb9c7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  #feed .fd .p { font-size:13px; font-weight:600; margin-top:2px; color:var(--green); } #feed .fd.kept { box-shadow:0 0 0 2px var(--accent) inset; } #feed .fd.kept .p { color:#fff; }
+  @keyframes fdIn { from { opacity:0; transform:translateX(-30px) scale(.9); } to { opacity:1; transform:none; } }
+  /* the dropdown buttons must not pick up the page's other button styles */
+  .dd .dd-btn, .dd .dd-opt { margin:0 !important; border-radius:4px !important; font-weight:500 !important; }
+  .dd .dd-opt { background:none !important; color:#bbb9c7 !important; padding:10px 12px !important; font-size:14px !important; }
+  .dd .dd-opt:hover, .dd .dd-opt:focus-visible { background:#3a3849 !important; color:#fff !important; } .dd .dd-opt.on { background:var(--accent) !important; color:#fff !important; }
+  .dd .dd-btn { background:#282633 !important; color:#fff !important; padding:10px 12px 10px 14px !important; font-size:14px !important; }
+  .uppanel .dd .dd-btn, #keysBar .dd .dd-btn { background:#312f3d !important; } .dd .dd-btn:hover, .dd.open .dd-btn { background:#3a3849 !important; }
+  .dd-ctCase .dd-btn { background:none !important; font-size:22px !important; font-weight:600 !important; padding:6px 8px !important; } .dd-ctCase .dd-btn:hover, .dd-ctCase.open .dd-btn { background:#312f3d !important; } .dd-ctCase .dd-opt { font-size:15px !important; }
+  /* dropdowns */
+  .dd { position:relative; display:inline-block; min-width:0; } .dd-native { display:none !important; }
+  .dd-btn { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-width:140px; background:#282633; color:#fff; border:0; border-radius:4px; padding:10px 12px 10px 14px; font:inherit; font-size:14px; font-weight:500; cursor:pointer; white-space:nowrap; text-align:left; }
+  .uppanel .dd-btn, #keysBar .dd-btn { background:#312f3d; } .dd-btn:hover { background:#3a3849; }
+  .dd.open .dd-btn { background:#3a3849; box-shadow:0 0 0 2px var(--accent) inset; }
+  .dd-btn svg { width:12px; height:12px; flex:none; fill:none; stroke:#bbb9c7; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; transition:transform .15s ease; } .dd.open .dd-btn svg { transform:rotate(180deg); }
+  .dd-pop { display:none; position:absolute; z-index:40; top:calc(100% + 6px); left:0; min-width:100%; background:#312f3d; border-radius:6px; padding:6px; box-shadow:0 14px 36px rgba(0,0,0,.55); }
+  .dd.open .dd-pop { display:block; animation:ddIn .12s ease-out; } @keyframes ddIn { from { opacity:0; transform:translateY(-4px); } }
+  .dd-list { max-height:min(320px, 50vh); overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+  .dd-opt { background:none; border:0; color:#bbb9c7; font:inherit; font-size:14px; text-align:left; padding:10px 12px; border-radius:4px; cursor:pointer; white-space:nowrap; }
+  .dd-opt:hover, .dd-opt:focus-visible { background:#3a3849; color:#fff; outline:none; } .dd-opt.on { background:var(--accent); color:#fff; }
+  .dd-q { width:100%; margin-bottom:6px; background:#282633 !important; border:0; border-radius:4px; padding:9px 12px; color:#fff; font:inherit; font-size:14px; } .dd-none { padding:10px 12px; color:#8f8c9e; }
+  .dd-ctCase .dd-btn { background:none; font-size:22px; font-weight:600; padding:6px 8px; gap:10px; min-width:0; } .dd-ctCase .dd-btn:hover { background:#312f3d; } .dd-ctCase .dd-pop { min-width:260px; } .dd-ctCase .dd-opt { font-size:15px; }
+  /* upgrader: your stake on the left, the target on the right, the chance ring between them, the two lists underneath */
+  #upHero { display:grid; grid-template-columns:minmax(0,1fr) 300px minmax(0,1fr); gap:20px; align-items:center; max-width:1240px; width:100%; margin:0 auto; }
+  .upcard { position:relative; min-height:270px; border-radius:4px; padding:22px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center;
+    background:radial-gradient(closest-side at 50% 40%, color-mix(in srgb, var(--c, #312f3d) 30%, transparent), transparent 90%), #282633; }
+  .upcard img { height:150px; max-width:100%; object-fit:contain; filter:drop-shadow(0 12px 16px rgba(0,0,0,.45)); margin-bottom:6px; }
+  .upcard .tn { font-size:19px; font-weight:700; line-height:1.15; } .upcard .tw { font-size:14px; color:#8f8c9e; } .upcard .pr { font-size:22px; font-weight:700; margin-top:6px; font-variant-numeric:tabular-nums; }
+  .upcard .lbl { position:absolute; top:12px; left:14px; font-size:13px; color:#8f8c9e; } .upcard .more { position:absolute; top:12px; right:14px; background:var(--accent); color:#fff; border-radius:4px; font-size:13px; font-weight:700; padding:2px 8px; }
+  .upcard.empty .tw { font-size:15px; color:#555261; }
+  #upCenter { position:static; display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; }
+  #upDial { position:relative; width:260px; height:260px; }
+  #upDial svg { width:100%; height:100%; overflow:visible; } #upNeedle { transform-origin:50px 50px; transform-box:view-box; }
+  #upPct { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
+  #upPct b { font-size:46px; font-weight:800; color:var(--green); line-height:1; font-variant-numeric:tabular-nums; } #upPct b.off { color:#555261; } #upPct small { font-size:16px; font-weight:600; color:#8f8c9e; }
+  #upResult { height:24px; font-size:17px; font-weight:700; color:var(--red); text-align:center; margin-top:-6px; }
+  #upGo { width:100%; margin-top:-4px; }
+  #upLists { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; max-width:1240px; width:100%; margin:0 auto; }
+  .uppanel { height:auto; position:static; padding:16px; gap:12px; }
+  .uppanel .upgrid { max-height:min(460px, 52vh); grid-template-columns:repeat(auto-fill, minmax(124px, 1fr)); padding:0; }
+  .uppanel input, .uppanel .chip { background:#312f3d; } .uppanel .chip:hover { background:#3a3849; } .uppanel .chip.on { background:var(--accent); }
+  .uppanel h2 { font-size:15px; color:#fff; } .uppanel h2 .sum b { font-size:15px; color:var(--green); } #upTargetSum { display:none; }
+  .upgrid .icard img { height:70px; } .upgrid .icard .sn { font-size:13px; } .upgrid .icard .pr { font-size:13px; }
+  @media (max-width:1000px){ #upHero { grid-template-columns:1fr; } #upCenter { order:-1; } #upLists { grid-template-columns:1fr; } }
+  /* upgrader fills the screen exactly: the ring and cards on top, the two lists below scrolling inside themselves */
+  @media (min-width:1001px) and (min-height:641px){
+    #v-upgrader { --ring:clamp(240px, 37vh, 440px); height:calc(100vh - 64px); min-height:0; overflow:hidden; padding:16px 28px 18px; gap:16px; }
+    #upHero { flex:none; grid-template-columns:minmax(0,1fr) var(--ring) minmax(0,1fr); }
+    #upDial { width:var(--ring); height:var(--ring); }
+    #upPct b { font-size:calc(var(--ring) * .2); } #upPct small { font-size:calc(var(--ring) * .068); }
+    .upcard { height:calc(var(--ring) + 62px); min-height:0; padding:16px; }
+    .upcard img { height:calc(var(--ring) * .5); } .upcard .tn { font-size:clamp(16px, 2.3vh, 22px); } .upcard .pr { font-size:clamp(18px, 2.7vh, 26px); margin-top:2px; }
+    #upGo { padding:clamp(11px, 1.8vh, 16px); font-size:clamp(16px, 2.2vh, 20px); } #upCenter { gap:10px; } #upResult { height:20px; margin-top:-2px; }
+    #upLists { flex:1; min-height:0; }
+    .uppanel { height:100%; min-height:0; padding:14px; gap:10px; } .uppanel .upgrid { flex:1; min-height:0; max-height:none; }
+  }
+  /* merge: two of the same weapon in, one better skin out (or, if the odds go against you, the cheapest of that weapon) */
+  #mgHero { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:20px; max-width:1240px; width:100%; margin:0 auto; align-items:stretch; }
+  #mgOut { display:flex; flex-direction:column; gap:12px; } #mgOut .upcard { flex:1; }
+  #mgGo { background:var(--green); color:var(--ink); border:0; border-radius:4px; padding:15px; font:inherit; font-size:18px; font-weight:700; cursor:pointer; } #mgGo:disabled { background:rgba(204,210,255,.1); color:var(--muted); cursor:default; }
+  #mgOutCard .pct { font-size:34px; font-weight:800; color:var(--green); line-height:1; margin-top:4px; } #mgOutCard .alt { font-size:13px; color:#8f8c9e; margin-top:6px; position:relative; top:-12px; }
+  #mgHero .upcard { min-height:270px; } #mgList { max-width:1240px; width:100%; margin:0 auto; }
+  #mgList .upgrid .icard.pick { box-shadow:0 0 0 2px var(--accent) inset; }
+  @media (min-width:1001px) and (min-height:641px){
+    #v-merge { --h:clamp(230px, 40vh, 420px); height:calc(100vh - 64px); min-height:0; overflow:hidden; padding:16px 28px 18px; gap:16px; }
+    #mgHero { flex:none; } #mgHero .upcard { height:var(--h); min-height:0; } #mgOut .upcard { height:calc(var(--h) - 62px); flex:none; }
+    #mgHero .upcard img { height:calc(var(--h) * .45); }
+    #mgList { flex:1; min-height:0; height:auto; } #mgList .upgrid { flex:1; min-height:0; max-height:none; }
+  }
+  @media (max-width:1000px){ #mgHero { grid-template-columns:1fr; } }
+  /* trading: no server, the two browsers talk straight to each other */
+  #v-trade { max-width:1240px; width:100%; margin:0 auto; }
+  .trcols { display:grid; grid-template-columns:1fr 1fr; gap:20px; } .trbox { background:#282633; border-radius:4px; padding:22px; display:flex; flex-direction:column; gap:12px; }
+  .trbox h3 { margin:0; font-size:18px; } #trCode { font-size:46px; font-weight:800; letter-spacing:.14em; color:var(--green); text-align:center; min-height:60px; font-variant-numeric:tabular-nums; } .trbox input { background:#312f3d; border:0; border-radius:4px; padding:14px; color:#fff; font:inherit; font-size:26px; letter-spacing:.14em; text-align:center; } .trbox input:focus { outline:2px solid var(--accent); } .trbox textarea { background:#312f3d; color:#fff; border:0; border-radius:4px; padding:12px; font:12px/1.4 ui-monospace, Consolas, monospace; min-height:92px; resize:vertical; word-break:break-all; } .trbox textarea:focus { outline:2px solid var(--accent); }
+  .trbtn { background:var(--accent); color:#fff; border:0; border-radius:4px; padding:13px; font:inherit; font-size:15px; font-weight:600; cursor:pointer; } .trbtn.alt { background:#312f3d; color:#fff; } .trbtn:disabled { opacity:.4; cursor:default; }
+  #trMsg { margin-top:14px; min-height:22px; color:#bbb9c7; font-size:14px; } #trMsg.err { color:var(--red); }
+  .trhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; } #trStatus { font-size:15px; color:#bbb9c7; } #trStatus b { color:var(--green); font-weight:600; }
+  .trgrid { display:grid; grid-template-columns:1fr 1fr; gap:20px; } .trgrid .uppanel { height:auto; position:static; } .trgrid .upgrid { min-height:150px; max-height:300px; }
+  #trConfirm { display:block; width:min(100%, 420px); margin:18px auto; background:var(--green); color:var(--ink); border:0; border-radius:4px; padding:15px; font:inherit; font-size:18px; font-weight:700; cursor:pointer; } #trConfirm:disabled { background:rgba(204,210,255,.1); color:var(--muted); cursor:default; } #trConfirm.on { background:#312f3d; color:#fff; }
+  #trPick .upgrid { max-height:340px; } .trok { color:var(--green); font-weight:600; }
+  #sigIn, #stunIn, #turnIn, #turnUserIn, #turnPassIn { width:300px; background:#282633; border:0; border-radius:4px; padding:10px 12px; color:#fff; font:inherit; font-size:13px; }
+  @media (max-width:1000px){ .trcols, .trgrid { grid-template-columns:1fr; } }
+  /* our own confirm box */
+  #dlg { position:fixed; inset:0; z-index:60; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(8,7,12,.7); backdrop-filter:blur(3px); }
+  #dlg.show { display:flex; animation:dlgFade .16s ease-out; } #dlg.show #dlgBox { animation:dlgPop .2s cubic-bezier(.2,.9,.3,1.1); } #dlg.out { display:flex; opacity:0; transition:opacity .14s ease; }
+  @keyframes dlgFade { from { opacity:0; } } @keyframes dlgPop { from { opacity:0; transform:translateY(10px) scale(.96); } }
+  #dlgBox { width:min(420px, 100%); background:#282633; border-radius:6px; padding:26px; box-shadow:0 24px 60px rgba(0,0,0,.55); }
+  #dlgText { font-size:18px; font-weight:600; line-height:1.4; } #dlgText b { color:var(--green); } #dlgText small { display:block; margin-top:6px; font-size:14px; font-weight:400; color:#8f8c9e; }
+  #dlgBtns { display:flex; gap:10px; margin-top:24px; } #dlgBtns button { flex:1; border:0; border-radius:4px; padding:13px; font:inherit; font-size:16px; font-weight:700; cursor:pointer; }
+  #dlgNo { background:#312f3d; color:#fff; } #dlgNo:hover { background:#3a3849; } #dlgYes { background:var(--green); color:var(--ink); } #dlgYes:hover { filter:brightness(1.08); } #dlgYes.danger { background:var(--red); color:#fff; }
+  /* settings: three groups */
+  #v-settings { max-width:720px; margin:0; gap:16px; }
+  .sgroup { background:#282633; border-radius:4px; padding:6px 24px 8px; }
+  .sgroup h3 { margin:16px 0 4px; font-size:13px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:#8f8c9e; }
+  .sgroup .setting { padding:18px 0; border-bottom:1px solid #312f3d; gap:20px; } .sgroup .setting:last-child, .sgroup .setting + .rules + .setting { }
+  .sgroup > .setting:last-of-type { border-bottom:0; }
+  .sgroup .setting .d b { font-size:16px; font-weight:600; } .sgroup .setting .d span { display:block; margin-top:3px; font-size:13px; color:#8f8c9e; line-height:1.4; }
+  .sgroup .setting.col { flex-direction:column; align-items:stretch; gap:12px; }
+  .sgroup input[type=text], .sgroup input[type=number] { background:#312f3d; border:0; border-radius:4px; padding:12px 14px; color:#fff; font:inherit; font-size:14px; }
+  .sgroup input:focus { outline:2px solid var(--accent); }
+  #sigIn { width:100%; }
+  .sgroup .rules { background:#1f1d27; margin:0 0 14px; padding:18px 20px; } .sgroup .rules .r > span { width:200px; }
+  .sgroup .rules input { width:130px; background:#312f3d; padding-left:30px; }
+  /* the switches are exactly 48 wide whatever other button rules say, so the knob reaches the end */
+  button.sw, .setting button.sw { width:48px; min-width:48px; max-width:48px; height:26px; padding:0; border:0; }
+  #itPage .big img { opacity:0; transform:translateY(24px) scale(.93); } #itPage .big img.in { animation:itImgIn .7s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes itImgIn { from { opacity:0; transform:translateY(24px) scale(.93); } to { opacity:1; transform:none; } }
+  #itPage .side > * { opacity:0; transform:translateY(12px); animation:itRise .5s ease-out forwards; } #itPage .side > :nth-child(2) { animation-delay:.12s; } #itPage .side > :nth-child(3) { animation-delay:.2s; } #itPage .side > :nth-child(4) { animation-delay:.28s; } #itPage .side > :nth-child(5) { animation-delay:.36s; }
+  @keyframes itRise { to { opacity:1; transform:none; } }
+  .icard .lk { width:14px; height:14px; fill:none; stroke:#bbb9c7; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; margin-right:auto; }
+  #itPage .btnrow { display:flex; gap:10px; } #itPage .btnrow .sell { flex:1; } #itPage .btnrow .sell:disabled { background:rgba(204,210,255,.1); color:var(--muted); cursor:default; }
+  #itPage .lockbtn { background:#312f3d; color:#fff; border:0; border-radius:4px; padding:16px 22px; font:inherit; font-size:16px; font-weight:600; cursor:pointer; } #itPage .lockbtn:hover { background:#3a3849; }
+  /* daily reward */
+  #daily { color:#bbb9c7; } #daily.ready { color:var(--green); font-weight:700; } #daily.ready::after { content:""; position:absolute; top:12px; right:8px; width:7px; height:7px; border-radius:50%; background:var(--green); }
+  #dlgBox.wide { width:min(540px, 100%); } #dlgText .dayrow { display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; margin-top:16px; }
+  .d7 { background:#312f3d; border-radius:4px; padding:10px 2px; text-align:center; font-size:12px; font-weight:500; color:#8f8c9e; } .d7 b { display:block; margin-top:4px; font-size:14px; color:#fff; font-variant-numeric:tabular-nums; }
+  #dlgText .d7 b { color:#fff; } .d7.done { opacity:.4; } .d7.now { background:var(--green); color:var(--ink); } #dlgText .d7.now b { color:var(--ink); }
+  @media (max-width:700px){ #daily { position:absolute; left:96px; bottom:66px; flex:none; width:auto; height:34px; padding:0 12px; background:#282633; } }
+  /* stats */
+  #v-stats { max-width:1100px; width:100%; } #stTop, #stMore { display:grid; gap:12px; } #stTop { grid-template-columns:repeat(3, 1fr); } #stMore { grid-template-columns:repeat(4, 1fr); }
+  @media (max-width:800px){ #stTop, #stMore { grid-template-columns:repeat(2, 1fr); } }
+  .sttile { background:#282633; border-radius:4px; padding:20px; display:flex; flex-direction:column; gap:6px; } .sttile b { font-size:30px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; } .sttile span { font-size:14px; color:#8f8c9e; }
+  .sttile.up b { color:var(--green); } .sttile.down b { color:var(--red); }
+  .stcols { display:grid; grid-template-columns:1.4fr 1fr; gap:12px; } .stbox { background:#282633; border-radius:4px; padding:20px 22px; } .stbox h3 { margin:0 0 14px; font-size:13px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:#8f8c9e; }
+  .strow { display:grid; grid-template-columns:130px 1fr 54px; align-items:center; gap:14px; padding:8px 0; } .strow .nm { font-size:15px; font-weight:600; color:var(--c); } .strow b { text-align:right; font-variant-numeric:tabular-nums; }
+  .strow .bar { height:10px; background:#312f3d; border-radius:4px; overflow:hidden; } .strow .bar i { display:block; height:100%; border-radius:4px; }
+  .stbest { text-align:center; padding:6px 0; background:radial-gradient(closest-side at 50% 38%, color-mix(in srgb, var(--c) 30%, transparent), transparent 90%); } .stbest img { height:130px; max-width:100%; object-fit:contain; filter:drop-shadow(0 10px 14px rgba(0,0,0,.45)); }
+  .stbest .tn { font-size:18px; font-weight:700; margin-top:8px; } .stbest .tw { font-size:14px; color:#8f8c9e; margin-top:2px; } .stbest .pr { font-size:24px; font-weight:700; color:var(--green); margin-top:6px; } .stnone { color:#555261; padding:40px 0; text-align:center; }
+  #stReset { align-self:flex-start; }
+  @media (max-width:1000px){ .stcols { grid-template-columns:1fr; } }
+  /* the reel, closer to CS2: each tile names its weapon and skin, and the one you land on stays lit */
+  .tile .in { padding:10px 6px 8px; justify-content:flex-start; gap:0; } .tile img { height:100px; }
+  .tile .nm { width:100%; text-align:center; margin-top:4px; padding:0 2px; } .tile .nm span { display:block; font-size:11px; color:#8f8c9e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .tile .nm b { display:block; font-size:13px; font-weight:600; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px; }
+  #stage.multi .tile .nm { display:none; } #stage.multi .tile .in { padding:4px; justify-content:center; }
+  .reel .tile { transition:opacity .45s ease, transform .45s cubic-bezier(.2,.8,.2,1); } .reel.landed .tile:not(.hit) { opacity:.28; } .reel.landed .tile.hit { position:relative; z-index:1; }
+  .reel.landed .tile.hit .in { box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 80%, #fff 10%), 0 0 26px color-mix(in srgb, var(--c) 55%, transparent); }
+  /* the reel as in CS2: the case, blurred and dark, behind pale tiles that glow up from a rarity-coloured line, and a thin yellow-green marker */
+  #stage { background:#15141b; }
+  #reels { position:relative; z-index:1; }
+  .tile .in, #stage.multi .tile .in { background:linear-gradient(0deg, color-mix(in srgb, var(--c) 72%, transparent) 0%, transparent 46%), rgba(214,218,232,.2) !important; border-radius:3px; box-shadow:inset 0 -3px 0 var(--c); justify-content:center; padding:10px 6px 12px; }
+  .tile .nm { display:none !important; } .tile img { height:118px; filter:drop-shadow(0 6px 8px rgba(0,0,0,.35)); }
+  .reel.landed .tile.hit .in { box-shadow:inset 0 -3px 0 var(--c), 0 0 0 2px rgba(255,255,255,.85), 0 0 28px color-mix(in srgb, var(--c) 60%, transparent); }
+  #marker { top:16px; bottom:16px; width:2px; margin-left:-1px; background:#d3df45; border-radius:1px; box-shadow:0 0 9px rgba(211,223,69,.65); z-index:3; } #marker::before, #marker::after { display:none; }
+  #stage.multi #marker { top:6px; bottom:6px; }
+  /* nothing is spinning yet: the reel is folded away and the cases sit at the top; it opens out smoothly on the first open */
+  #reelSec { transition:margin-bottom .5s cubic-bezier(.2,.8,.2,1); } #stage { transition:height .5s cubic-bezier(.2,.8,.2,1), border-width .5s ease; }
+  #reelSec.collapsed { margin-bottom:-20px; } #reelSec.collapsed #stage { height:0 !important; border-width:0; }
+  /* lighter to draw: no per-picture filter, and each tile is laid out on its own */
+  .tile img { filter:none !important; } .tile { contain:layout style; }
+  /* the edge fades: both sides sit above the strip (the left one used to be hidden under it), stronger and wider, in the stage's own colour */
+  #stage::before, #stage::after { width:clamp(120px, 16%, 280px); z-index:2; }
+  #stage::before { background:linear-gradient(90deg, #15141b 0%, rgba(21,20,27,.92) 30%, rgba(21,20,27,.55) 62%, transparent 100%); }
+  #stage::after { background:linear-gradient(270deg, #15141b 0%, rgba(21,20,27,.92) 30%, rgba(21,20,27,.55) 62%, transparent 100%); }
+  /* bank + rebirth */
+  #v-bank, #v-rebirth { max-width:1100px; width:100%; }
+  #bkSlots { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px; } #bkSlots .upcard { min-height:230px; cursor:pointer; } #bkSlots .upcard.empty { cursor:default; } #bkSlots .upcard img { height:110px; }
+  #bkClaim { display:flex; align-items:center; gap:18px; } #bkGo { background:var(--green); color:var(--ink); border:0; border-radius:4px; padding:15px 34px; font:inherit; font-size:18px; font-weight:700; cursor:pointer; } #bkGo:disabled { background:rgba(204,210,255,.1); color:var(--muted); cursor:default; } .bkinfo { color:#8f8c9e; font-size:15px; }
+  #bkList { height:auto; position:static; } #bkList .upgrid { max-height:340px; }
+  .rebox { background:#282633; border-radius:4px; padding:22px; display:flex; flex-direction:column; gap:18px; } .rebox h3 { margin:0; font-size:13px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:#8f8c9e; }
+  .rebnow { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; } .rebnow .sttile { background:#312f3d; } .rebnow small { font-size:16px; color:#8f8c9e; font-weight:600; }
+  .reb-steps { display:grid; grid-template-columns:repeat(10, 1fr); gap:6px; } .rs { background:#312f3d; border-radius:4px; padding:10px 4px; text-align:center; font-size:12px; color:#8f8c9e; } .rs b { display:block; margin-top:3px; font-size:12px; color:#fff; font-variant-numeric:tabular-nums; }
+  .rs.done { opacity:.4; } .rs.next { background:var(--accent); color:#fff; }
+  #rebGo { background:var(--green); color:var(--ink); border:0; border-radius:4px; padding:15px; font:inherit; font-size:18px; font-weight:700; cursor:pointer; align-self:flex-start; min-width:320px; } #rebGo:disabled { background:rgba(204,210,255,.1); color:var(--muted); cursor:default; } .rebmax { color:var(--green); font-weight:700; font-size:18px; }
+  .toastmsg { position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:#312f3d; color:#fff; padding:12px 20px; border-radius:4px; font-size:15px; z-index:70; box-shadow:0 10px 30px rgba(0,0,0,.5); animation:ddIn .2s ease-out; transition:opacity .4s; } .toastmsg.out { opacity:0; }
+  @media (max-width:1000px){ #bkSlots { grid-template-columns:repeat(2, minmax(0,1fr)); } .rebnow { grid-template-columns:repeat(2, 1fr); } .reb-steps { grid-template-columns:repeat(5, 1fr); } }
+  /* ten tabs have to fit: tighter on medium screens, icons only on narrow ones */
+  @media (min-width:701px) and (max-width:1380px){ #side, #side:hover, #side.kbd { padding:0 16px; } #side .logo { margin-right:12px !important; } .nav { padding:0 11px !important; font-size:15px !important; } .nav[data-view=settings] .t { font-size:0 !important; } }
+  @media (min-width:701px) and (max-width:1200px){ .nav { padding:0 8px !important; font-size:14px !important; } #side .wallet { padding:0 12px; margin-right:4px; } }
+  @media (min-width:701px) and (max-width:1020px){ .nav svg { display:block !important; width:22px; height:22px; } .nav .t { display:none; } .nav { padding:0 10px !important; } #side .logo { margin-right:6px !important; } }
+  .keycard.flash { animation:keyFlash 3.8s ease-out; position:relative; z-index:1; }
+  @keyframes keyFlash { 0%, 62% { box-shadow:0 0 0 3px var(--accent), 0 0 34px 6px color-mix(in srgb, var(--accent) 65%, transparent); } 15%, 45% { box-shadow:0 0 0 3px var(--accent), 0 0 18px 2px color-mix(in srgb, var(--accent) 45%, transparent); } 100% { box-shadow:0 0 0 3px transparent, 0 0 0 0 transparent; } }
+  .icard.locked { opacity:.42; filter:saturate(.45); cursor:not-allowed; } .icard.locked:hover { transform:none; }
+  @media (max-width:700px){ .toastmsg { bottom:84px; } }
+</style>
+</head>
+<body>
+<nav id="side">
+  <div class="logo"><img src="assets/logo/unboxd-icon.svg" alt="Unboxd" title="Unboxd"></div>
+  <button class="nav on" data-view="open" title="Open cases">
+    <svg viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg><span class="t">Open</span></button>
+  <button class="nav" data-view="keys" title="Buy keys to open cases">
+    <svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/></svg><span class="t">Keys</span><span class="badge" id="keyBadge"></span></button>
+  <button class="nav" data-view="contents" title="What is in the selected case">
+    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="t">Contents</span></button>
+  <button class="nav" data-view="inventory" title="Everything you have opened">
+    <svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M8 8V6a2 2 0 012-2h4a2 2 0 012 2v2M3 13h18"/></svg><span class="t">Inventory</span><span class="badge" id="invBadge"></span></button>
+  <button class="nav" data-view="upgrader" title="Stake items for a shot at a better one">
+    <svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span class="t">Upgrader</span></button>
+  <button class="nav" data-view="merge" title="Merge two of the same weapon">
+    <svg viewBox="0 0 24 24"><path d="M6 4v5a6 6 0 0 0 12 0V4M12 15v5"/></svg><span class="t">Merge</span></button>
+  <button class="nav" data-view="stats" title="Your numbers">
+    <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="t">Stats</span></button>
+  <button class="nav" data-view="bank" title="Skins that earn money, and rebirth">
+    <svg viewBox="0 0 24 24"><path d="M3 10l9-6 9 6M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/></svg><span class="t">Bank</span></button>
+  <button class="nav" data-view="rebirth" title="Pay for permanent bonuses">
+    <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v4h-4"/></svg><span class="t">Rebirth</span></button>
+  <button class="nav" data-view="trade" title="Trade skins directly with a friend">
+    <svg viewBox="0 0 24 24"><path d="M4 8h13M13 4l4 4-4 4M20 16H7M11 12l-4 4 4 4"/></svg><span class="t">Trade</span></button>
+  <div class="sp"></div>
+  <button class="nav" id="daily" title="Daily reward"><span class="t" id="dailyT">Daily</span></button>
+  <div class="wallet" id="wallet">$0.00<small>balance</small></div>
+  <button class="nav" data-view="settings" title="Sound and pictures">
+    <svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span class="t">Settings</span></button>
+</nav>
+<div id="content">
+<main class="view on" id="v-open">
+  <section id="reelSec" class="collapsed">
+    <div id="stage">
+      <div class="idle" id="idle"></div>
+      <div id="reels"></div>
+      <div id="marker"></div>
+    </div>
+    <div id="feed"></div>
+    <div id="controls" style="margin-top:12px">
+      <span id="opened"></span>
+    </div>
+  </section>
+
+  <div id="caseLayout">
+    <section id="caseList">
+      <div id="caseBar">
+        <div class="grow"></div>
+        <input id="caseSearch" type="search" placeholder="Search" autocomplete="off">
+        <select id="caseSort" title="Sort"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="cheap">Cheapest key</option><option value="dear">Dearest key</option><option value="name">Name A-Z</option></select>
+      </div>
+      <div id="cases"></div>
+    </section>
+    <aside id="casePanel">
+      <div class="cimg"><img id="cpImg" alt=""></div>
+      <div class="cname" id="cpName">Pick a case</div>
+      <div class="csub" id="cpSub"></div>
+      <div id="keybar"></div>
+      <div id="countBar"><div id="counts"></div></div>
+      <button id="open" disabled>Open case</button>
+      <div id="autoBar"><button class="chip" id="tgSell">Auto sell</button><button class="chip" id="tgRoll">Keep rolling</button></div>
+      <h3>Contains one of the following</h3>
+      <div id="cpContents"></div>
+    </aside>
+  </div>
+</main>
+
+<main class="view" id="v-keys">
+  <div id="keysLayout">
+    <section>
+      <div id="keysBar"><div class="grow"></div>
+        <input id="keySearch" type="search" placeholder="Search" autocomplete="off">
+        <select id="keySort"><option value="price">Cheapest first</option><option value="dear">Dearest first</option><option value="name">Name A-Z</option><option value="cases">Opens most cases</option></select></div>
+      <div id="keysFilters"><button class="chip on" data-f="all">All</button><button class="chip" data-f="buy">Affordable</button><button class="chip" data-f="own">Owned</button></div>
+      <div id="keysGrid"></div>
+    </section>
+    <aside id="keysSide"></aside>
+  </div>
+</main>
+
+<main class="view" id="v-contents">
+  <div id="ctBar">
+    <img id="ctImg" alt="">
+    <div><div class="ctn" id="contentsTitle">Case contents</div><div class="cts" id="ctSub"></div></div>
+    <div class="grow"></div>
+    <select id="ctCase" title="Look at another case"></select>
+    <button id="ctOpen">Open this case</button>
+  </div>
+  <div id="ctLayout"><div id="contents"></div><aside id="ctDetail"></aside></div>
+</main>
+
+<main class="view" id="v-upgrader">
+  <div id="upHero">
+    <div class="upcard" id="upMineCard"></div>
+    <section id="upCenter">
+      <div id="upDial">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="44" fill="none" stroke="#312f3d" stroke-width="6"/>
+          <circle id="upArc" cx="50" cy="50" r="44" fill="none" stroke="#26ff85" stroke-width="6" stroke-dasharray="0 276.5" transform="rotate(-90 50 50)"/>
+          <g id="upNeedle"><rect x="48.3" y="-1" width="3.4" height="15" rx="1.7" fill="#fff"/></g>
+        </svg>
+        <div id="upPct"></div>
+      </div>
+      <button id="upGo" disabled>Upgrade</button>
+      <div id="upResult"></div>
+    </section>
+    <div class="upcard" id="upTargetCard"></div>
+  </div>
+  <div id="upLists">
+    <section class="uppanel">
+      <h2>Stake <span class="sum" id="upStakeSum"></span></h2>
+      <div class="upbar"><input id="upSearch" type="search" placeholder="Search" autocomplete="off">
+        <select id="upSort"><option value="value">Highest value</option><option value="low">Lowest value</option><option value="new">Newest</option></select>
+        <button class="chip" id="upClear">Clear</button></div>
+      <div class="upgrid" id="upMine"></div>
+    </section>
+    <section class="uppanel">
+      <h2>Target <span class="sum" id="upTargetSum"></span></h2>
+      <div class="upbar"><div class="mults" id="upMults"></div></div>
+      <div class="upbar"><input id="upTSearch" type="search" placeholder="Search" autocomplete="off">
+        <select id="upTSort"><option value="asc">Cheapest first</option><option value="desc">Dearest first</option></select></div>
+      <div class="upgrid" id="upTargets"></div>
+    </section>
+  </div>
+</main>
+
+<main class="view" id="v-inventory">
+  <div id="invBar">
+    <span id="invTotal"></span>
+    <div class="grow"></div>
+    <input id="invSearch" type="search" placeholder="Search" autocomplete="off">
+    <select id="invSort" title="Sort">
+      <option value="new">Newest first</option><option value="value">Highest value</option><option value="rarity">Rarest first</option>
+      <option value="name">Name A-Z</option><option value="wear">Best condition</option>
+    </select>
+    <button id="sellAll" class="chip">Sell everything</button>
+    <button id="clear" class="chip">Clear</button>
+  </div>
+  <div id="invFilters"></div>
+  <div id="invLayout"><div id="invGrid"></div><aside id="invDetail"></aside></div>
+</main>
+
+<main class="view" id="v-merge">
+  <div id="mgHero">
+    <div class="upcard" id="mgA"></div>
+    <div class="upcard" id="mgB"></div>
+    <div id="mgOut"><div class="upcard" id="mgOutCard"></div><button id="mgGo" disabled>Merge</button></div>
+  </div>
+  <section class="uppanel" id="mgList">
+    <div class="upbar"><input id="mgSearch" type="search" placeholder="Search" autocomplete="off">
+      <select id="mgSort"><option value="value">Highest value</option><option value="low">Lowest value</option><option value="new">Newest</option></select>
+      <button class="chip" id="mgClear">Clear</button></div>
+    <div class="upgrid" id="mgMine"></div>
+  </section>
+</main>
+
+<main class="view" id="v-bank">
+  <div id="bkSlots"></div>
+  <div id="bkClaim"></div>
+  <section class="uppanel" id="bkList"><div class="upbar"><input id="bkSearch" type="search" placeholder="Search" autocomplete="off"><select id="bkSort"><option value="value">Highest value</option><option value="low">Lowest value</option></select></div><div class="upgrid" id="bkInv"></div></section>
+</main>
+
+<main class="view" id="v-rebirth">
+  <section class="rebox" id="rebirth"></section>
+</main>
+
+<main class="view" id="v-stats">
+  <div id="stTop"></div>
+  <div class="stcols">
+    <section class="stbox"><h3>Drops</h3><div id="stRarity"></div></section>
+    <section class="stbox"><h3>Best drop</h3><div id="stBest"></div></section>
+  </div>
+  <div id="stMore"></div>
+  <button class="chip" id="stReset">Reset stats</button>
+</main>
+
+<main class="view" id="v-trade">
+  <section id="trConnect">
+    <div class="trcols">
+      <div class="trbox">
+        <h3>Host a trade</h3>
+        <button class="trbtn" id="trHost">Get a code</button>
+        <div id="trCode"></div>
+      </div>
+      <div class="trbox">
+        <h3>Join a trade</h3>
+        <input id="trJoinIn" type="text" inputmode="numeric" maxlength="7" autocomplete="off" placeholder="Enter the code">
+        <button class="trbtn" id="trJoin">Join</button>
+      </div>
+    </div>
+    <div id="trMsg"></div>
+  </section>
+  <section id="trLive" style="display:none">
+    <div class="trhead"><div id="trStatus"></div><button class="chip" id="trLeave">Leave</button></div>
+    <div class="trgrid">
+      <div class="uppanel"><h2>You give <span class="sum" id="trMineSum"></span></h2><div class="upgrid" id="trMine"></div></div>
+      <div class="uppanel"><h2>You get <span class="sum" id="trTheirSum"></span></h2><div class="upgrid" id="trTheirs"></div></div>
+    </div>
+    <button id="trConfirm" disabled>Confirm</button>
+    <section class="uppanel" id="trPick">
+      <div class="upbar"><input id="trSearch" type="search" placeholder="Search" autocomplete="off"><select id="trSort"><option value="value">Highest value</option><option value="low">Lowest value</option><option value="new">Newest</option></select></div>
+      <div class="upgrid" id="trKeys"></div>
+      <div class="upgrid" id="trInv"></div>
+    </section>
+  </section>
+</main>
+
+<main class="view" id="v-item">
+  <button id="itBack" class="back">Back</button>
+  <div id="itPage"></div>
+</main>
+
+<main class="view" id="v-settings">
+  <section class="sgroup">
+    <h3>Auto sell</h3>
+    <div class="rules" id="sellRules">
+      <div class="r"><span>Sell these</span><div id="sellRarities"></div></div>
+      <div class="r"><span>Keep if worth at least</span><div class="money"><input id="keepAbove" type="number" min="0" step="1" placeholder="off"></div></div>
+      <div class="r"><span>Keep StatTrak™</span><button class="sw" id="swStat"></button></div>
+    </div>
+  </section>
+  <section class="sgroup">
+    <h3>Opening</h3>
+    <div class="setting"><div class="d"><b>Keep rolling</b></div><button class="sw" id="swRoll"></button></div>
+    <div class="setting"><div class="d"><b>Sound</b></div><button class="sw on" id="mute"></button></div>
+  </section>
+  <section class="sgroup">
+    <h3>Trading</h3>
+    <div class="setting col"><div class="d"><b>Trade server</b></div><input id="sigIn" type="text" spellcheck="false" placeholder="wss://broker.emqx.io:8084/mqtt"></div>
+  </section>
+</main>
+</div>
+
+<div id="dlg" aria-hidden="true"><div id="dlgBox" role="dialog" aria-modal="true"><div id="dlgText"></div><div id="dlgBtns"><button id="dlgNo">Cancel</button><button id="dlgYes">OK</button></div></div></div>
+
+<div id="result"><div id="card"><div id="vis"><div id="flat"></div></div><div id="info"></div></div></div>
+
+<div id="loading">
+  <h1 style="font-size:34px" aria-label="Unboxd"><img src="assets/logo/unboxd-icon.svg" alt="Unboxd"></h1>
+  <div id="loadMsg">Loading...</div>
+  <div class="bar"><i id="loadBar"></i></div>
+  <div id="loadSub"></div>
+  <button id="loadSkip" style="display:none">Skip (use flat images)</button>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const PITCH = 172;            // tile width in px (must match .tile width)
+const SPIN_MS = 4000;
+const STORE = 'unboxd.inventory.v1';
+
+let D, caseById = {}, rarityByName = {}, cur = null, busy = false, anim = null, anims = [], muted = false, audio = null;
+let inventory = []; const INV_MAX = 10000;           // most skins saved in the browser (each is about 150 bytes, and the browser allows about 5 MB)
+try { inventory = JSON.parse(localStorage.getItem(STORE) || '[]'); } catch {}
+
+// ---------------- rolling ----------------
+const rand = Math.random;
+
+function poolFor(c){
+  const pool = {};
+  D.rarities.forEach(r => pool[r.name] = []);
+  c.drops.forEach(id => pool[D.items[id].rarity]?.push(id));
+  c.rare.forEach(id => pool['Rare Special Item'].push(id));
+  return pool;
+}
+
+// pick a rarity tier by the real odds; tiers a case doesn't have are skipped and the rest renormalised
+function rollTier(pool){
+  const tiers = D.rarities.filter(r => pool[r.name].length);
+  let x = rand() * tiers.reduce((s, r) => s + r.odds, 0);
+  for (const r of tiers){ x -= r.odds; if (x < 0) return r.name; }
+  return tiers[tiers.length - 1].name;
+}
+function rollItem(pool){ const ids = pool[rollTier(pool)]; return D.items[ids[Math.floor(rand() * ids.length)]]; }
+
+function wearOf(f){ return D.wear_bands.find(w => f < w.max)?.name || D.wear_bands.at(-1).name; }
+
+function rollDrop(c){
+  const pool = poolFor(c), item = rollItem(pool);
+  const float = item.min_float + rand() * (item.max_float - item.min_float);
+  return { item, float, wear: wearOf(float), stattrak: item.stattrak && rand() < 0.10, t: Date.now(), uid: Math.random().toString(36).slice(2) + Date.now().toString(36) };
+}
+
+// ---------------- audio ----------------
+function ctx(){ return audio ||= new (window.AudioContext || window.webkitAudioContext)(); }
+function beep(freq, dur, vol, type='triangle', when=0){
+  if (muted) return;
+  const a = ctx(), o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, a.currentTime + when);
+  g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + when + dur);
+  o.connect(g).connect(a.destination); o.start(a.currentTime + when); o.stop(a.currentTime + when + dur);
+}
+// the game's real CS2 sounds (assets/sounds, taken from the game files): decoded once, then played on demand
+const SND = {}, SND_LOAD = {}, SND_GAIN = 0.28;
+function snd(name, vol = 1){
+  if (muted) return;
+  const a = ctx(), b = SND[name];
+  if (b){ const s = a.createBufferSource(), gn = a.createGain(); s.buffer = b; gn.gain.value = vol ? SND_GAIN * (name === 'tick' ? .6 : 1) : 0; s.connect(gn).connect(a.destination); s.start(); return; }
+  if (SND_LOAD[name]) return;
+  SND_LOAD[name] = fetch('assets/sounds/' + name + '.mp3').then(r => r.arrayBuffer()).then(d => a.decodeAudioData(d)).then(x => { SND[name] = x; }).catch(() => {});
+}
+['tick', 'open', 'coin', 'key', 'buy', 'deny', 'click', 'r0', 'r1', 'r2', 'r3', 'r4'].forEach(n => addEventListener('pointerdown', () => { if (!SND[n] && !SND_LOAD[n] && !muted) snd(n, 0); }, { once: true }));
+const tick = () => snd('tick', .5);
+function reveal(rarity){
+  const n = { 'Mil-Spec Grade':0, 'Restricted':1, 'Classified':2, 'Covert':3, 'Rare Special Item':4 }[rarity] || 0;
+  snd('r' + n, .8);
+}
+
+// ---------------- UI ----------------
+const img = src => src ? `<img src="${src}" loading="lazy" alt="">` : '';
+let WEARIMG = {};                               // data/wear_images.json: item id -> picture per condition (made by scripts/fetch_wear_images.py)
+const itemSrc = (it, wear) => { const i = D.wear_bands.findIndex(w => w.name === wear); return (i >= 0 && WEARIMG[it.id]?.[i]) || it.image; };
+
+let caseQuery = '', caseSort = 'new';
+function renderCases(){
+  const q = caseQuery.trim().toLowerCase(), list = D.cases.filter(c => !q || c.name.toLowerCase().includes(q));
+  const idx = new Map(D.cases.map((c, i) => [c.id, i])), price = c => caseInfo[c.id]?.free ? -1 : (caseInfo[c.id]?.key.price ?? 0);
+  const order = { new: (a, b) => idx.get(b.id) - idx.get(a.id), old: (a, b) => idx.get(a.id) - idx.get(b.id), cheap: (a, b) => price(a) - price(b), dear: (a, b) => price(b) - price(a), name: (a, b) => a.name.localeCompare(b.name) }[caseSort];
+  $('cases').innerHTML = list.sort(order).map(c =>
+    `<div class="case${cur && cur.id === c.id ? ' sel' : ''}" data-id="${c.id}">${img(c.image)}<span class="own" data-own="${c.id}"></span><div class="cn">${c.name}</div><span class="price" data-price="${c.id}"></span></div>`).join('')
+    || '<div class="empty" style="grid-column:1/-1;padding:24px 0">No case matches.</div>';
+  $('cases').onclick = e => { const el = e.target.closest('.case'); if (el && !busy) selectCase(el.dataset.id); };
+  refreshEconomy();
+}
+
+function selectCase(id){
+  cur = caseById[id];
+  document.querySelectorAll('.case').forEach(el => {
+    const on = el.dataset.id === id;
+    el.classList.toggle('sel', on);
+  });
+  $('opened').textContent = ''; keyMsg = '';
+  ctSel = null; ctRareAll = false; renderContents(); renderCasePanel(); refreshEconomy();
+}
+
+// the selected case's panel: picture, what it needs to open, and a compact look at what it holds
+function renderCasePanel(){
+  if (!cur) return;
+  $('cpImg').src = cur.image; $('cpName').textContent = cur.name; preloadCase(cur);
+  $('cpSub').textContent = cur.first_sale_date ? 'In the game since ' + cur.first_sale_date.slice(0, 4) : '';
+  const pool = poolFor(cur), tiers = D.rarities.filter(r => pool[r.name].length), total = tiers.reduce((s, r) => s + r.odds, 0);
+  $('cpContents').innerHTML = tiers.map(r => {
+    const ids = pool[r.name], rare = r.name === 'Rare Special Item', show = ids.slice(0, rare ? 6 : 12), more = ids.length - show.length;
+    return `<div class="grp" style="--c:${r.color}"><div class="gh"><span style="color:${r.color}">${r.name}</span><span>${(r.odds / total * 100).toFixed(2)}%</span></div>
+      <div class="items">${show.map(i => `<div class="it" title="${D.items[i].name}">${itemImg(D.items[i])}</div>`).join('')}${more > 0 ? `<div class="empty" style="align-self:center;font-size:11px">+${more}</div>` : ''}</div></div>`;
+  }).join('');
+}
+
+let ctSel = null, ctRareAll = false;
+const wearRange = it => it.wears.map(w => WEAR_SHORT[w]).filter(Boolean);
+function renderContents(){
+  const pool = poolFor(cur), tiers = D.rarities.filter(r => pool[r.name].length), total = tiers.reduce((s, r) => s + r.odds, 0);
+  $('contentsTitle').textContent = cur.name;
+  $('ctImg').src = cur.image;
+  const info = caseInfo[cur.id], n = D.cases.length;
+  $('ctSub').textContent = [cur.first_sale_date ? 'In the game since ' + cur.first_sale_date.slice(0, 4) : '', `${cur.drops.length + cur.rare.length} items`, info ? (info.free ? 'free to open' : 'key ' + money(info.key.price)) : ''].filter(Boolean).join(' · ');
+  if (!$('ctCase').options.length) $('ctCase').innerHTML = [...D.cases].reverse().map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  $('ctCase').value = cur.id; $('ctCase').ddSync?.();
+  $('contents').innerHTML = tiers.map(r => {
+    const ids = pool[r.name], rare = r.name === 'Rare Special Item', collapsed = rare && !ctRareAll && ids.length > 11, show = collapsed ? ids.slice(0, 11) : ids;
+    const each = r.odds / total / ids.length * 100;
+    return `<section class="tier" style="--c:${r.color}"><div class="th"><b>${r.name}</b><span>${ids.length} item${ids.length === 1 ? '' : 's'} · ${each < 0.01 ? each.toFixed(4) : each.toFixed(2)}% each</span><span class="pct">${(r.odds / total * 100).toFixed(2)}%</span></div>
+      <div class="cgrid">${show.map(id => ctCard(D.items[id])).join('')}${collapsed ? `<button class="more" data-more="1">Show all ${ids.length}</button>` : ''}</div></section>`;
+  }).join('');
+  renderCtDetail();
+}
+function ctCard(it){
+  const worst = priceOf(it, it.max_float, false), best = priceOf(it, it.min_float, false), skin = it.pattern || it.name.replace(/^★ /, '');
+  const w = wearRange(it);
+  return `<div class="icard${it.id === ctSel ? ' sel' : ''}" data-id="${it.id}" style="--c:${it.color}" title="${it.name}">
+    <div class="top">${it.stattrak ? '<span class="st">StatTrak™</span>' : ''}<span class="wr">${w.length > 1 ? w[0] + '-' + w[w.length - 1] : w[0] || ''}</span></div>
+    ${itemImg(it)}<div class="wn">${it.weapon}</div><div class="sn">${skin}</div><div class="pr">${worst === best ? money(best) : money(worst) + ' - ' + money(best)}</div></div>`;
+}
+function renderCtDetail(){
+  const it = ctSel && D.items[ctSel];
+  if (!it || !(cur.drops.includes(it.id) || cur.rare.includes(it.id))){ ctSel = null; $('ctDetail').innerHTML = '<div class="hint"></div>'; return; }
+  const pool = poolFor(cur), tiers = D.rarities.filter(r => pool[r.name].length), total = tiers.reduce((s, r) => s + r.odds, 0);
+  const tier = tiers.find(r => r.name === (cur.rare.includes(it.id) ? 'Rare Special Item' : it.rarity)), chance = tier.odds / total / pool[tier.name].length * 100;
+  const worst = priceOf(it, it.max_float, false), best = priceOf(it, it.min_float, false);
+  $('ctDetail').style.setProperty('--c', it.color);
+  $('ctDetail').innerHTML = `<div class="dimg">${itemImg(it)}</div>
+    <div><div class="dw">${it.weapon}</div><div class="dn">${it.pattern || it.name}</div></div>
+    <div class="dr">${it.rarity}</div>
+    <dl><dt>Chance</dt><dd>${chance < 0.01 ? chance.toFixed(4) : chance.toFixed(2)}% per opening</dd><dt>Conditions</dt><dd>${it.wears.join(', ')}</dd>
+      <dt>StatTrak™</dt><dd>${it.stattrak ? 'Yes (1 in 10)' : 'No'}</dd><dt>Value</dt><dd class="val">${worst === best ? money(best) : money(worst) + ' - ' + money(best)}</dd></dl>
+`;
+}
+
+// the reel uses small copies of the pictures (scripts/make_thumbs.py): up to 350 can be on screen, and these are ~8x lighter to load and decode
+const thumbSrc = it => it.image.replace('/skins/', '/skins/thumb/').replace(/\.png$/, '.webp');
+const thumbCache = new Map();                                            // kept so the browser doesn't drop them before the spin
+function preloadCase(c){
+  [...c.drops, ...c.rare].forEach(id => { const it = D.items[id]; if (!it || thumbCache.has(id)) return; const im = new Image(); im.decoding = 'async'; im.src = thumbSrc(it); thumbCache.set(id, im); im.decode?.().catch(() => {}); });
+}
+function tileHTML(item, win){
+  return `<div class="tile" style="--c:${item.color}"><div class="in"><img src="${thumbSrc(item)}" decoding="async" alt=""></div></div>`;
+}
+
+function buildStrip(winner, strip){
+  const pool = poolFor(cur), winIdx = 52 + Math.floor(rand() * 8);
+  const tiles = [], count = winIdx + Math.ceil($('stage').clientWidth / PITCH / 2) + 3;      // nothing past what can be seen at the end
+  for (let i = 0; i < count; i++) tiles.push(tileHTML(i === winIdx ? winner : rollItem(pool), i === winIdx));
+  strip.innerHTML = tiles.join('');
+  return winIdx;
+}
+
+// how many cases can be opened at once: up to 5, as many as you have keys for (the free case: one)
+function maxCount(){
+  const i = cur && caseInfo[cur.id];
+  return !i || i.free ? 5 : Math.max(1, Math.min(5, caseKeys(cur.id)));
+}
+const feedItems = [];
+function renderFeed(fresh){
+  $('feed').classList.toggle('on', feedItems.length > 0);
+  $('feed').innerHTML = feedItems.map((f, i) => `<div class="fd${f.sold ? '' : ' kept'}${fresh && i < fresh ? ' new' : ''}" style="--c:${f.item.color}">${itemImg(f.item, false, f.wear)}<div class="n">${f.item.pattern || f.item.name.replace(/^★ /, '')}</div><div class="p">${f.sold ? 'Sold ' : ''}${money(f.price)}</div></div>`).join('');
+}
+// everything the Stats page shows is counted here as it happens, and saved in the browser
+const STATS_KEY = 'unboxd.stats.v1';
+const stats = { since: Date.now(), opened: 0, keysUsed: 0, keysBought: 0, keysSpent: 0, soldN: 0, soldCents: 0, rarity: {}, best: null,
+  upN: 0, upWin: 0, upStaked: 0, upWonCents: 0, merges: 0, trades: 0, dailyN: 0, dailyCents: 0 };
+try { Object.assign(stats, JSON.parse(localStorage.getItem(STATS_KEY) || '{}')); } catch {}
+const saveStats = () => { try { localStorage.setItem(STATS_KEY, JSON.stringify(stats)); } catch {} };
+const stat = (k, n = 1) => { stats[k] = (stats[k] || 0) + n; saveStats(); };
+let openCount = 1, loopOn = false;
+// auto sell / keep rolling, saved in the browser. A drop is sold on the spot when auto sell is on, its rarity is ticked, it isn't a
+// StatTrak you want to keep and it isn't worth the keep-above amount or more.
+const PREFS_KEY = 'unboxd.prefs.v1';
+const prefs = { autoSell: false, sellRarities: { 'Mil-Spec Grade': true, 'Restricted': true }, keepAbove: 1000, keepStatTrak: true, roll: false, stun: 'stun:stun.l.google.com:19302', signal: '', turn: '', turnUser: '', turnPass: '' };
+try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch {}
+const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch {} };
+const autoSellRule = d => prefs.autoSell && !!prefs.sellRarities[d.item.rarity] && !(prefs.keepStatTrak && d.stattrak)
+  && !(prefs.keepAbove > 0 && sellPrice(d.item, d.float, d.stattrak, d.free) >= prefs.keepAbove);
+const RARITY_LABEL = { 'Mil-Spec Grade': 'Mil-Spec', 'Restricted': 'Restricted', 'Classified': 'Classified', 'Covert': 'Covert', 'Rare Special Item': 'Knives & gloves' };
+function renderPrefs(){
+  $('tgSell').classList.toggle('on', prefs.autoSell);
+  ['tgRoll', 'swRoll'].forEach(id => $(id) && $(id).classList.toggle('on', prefs.roll));
+  $('swStat').classList.toggle('on', prefs.keepStatTrak);
+  $('keepAbove').value = prefs.keepAbove ? prefs.keepAbove / 100 : '';
+  if (D) $('sellRarities').innerHTML = D.rarities.map(r => `<button class="chip${prefs.sellRarities[r.name] ? ' on' : ''}" data-r="${r.name}" style="--c:${r.color}">${RARITY_LABEL[r.name] || r.name}</button>`).join('');
+}
+const ROW_H = [0, 210, 150, 120, 100, 88];      // reel height in px by how many reels are showing
+
+async function open(auto){
+  if (loopOn && !auto){ loopOn = false; refreshEconomy(); return; }          // pressed while rolling: stop after this spin
+  if (!cur || busy) return;
+  const quiet = prefs.roll;                                                  // rolling: no card, the reels and your balance are the feedback
+  if (quiet) loopOn = true;
+  if (quiet && !auto){ feedItems.length = 0; renderFeed(); }
+  const info = caseInfo[cur.id], n = Math.min(openCount, maxCount());
+  if (info && !info.free){ if (caseKeys(cur.id) < n){ keyMsg = n > 1 ? `You need ${n} keys for that.` : 'You need a key for this case.'; loopOn = false; refreshEconomy(); return; } wallet.keys[info.key.id] -= n; stat('keysUsed', n); keyMsg = ''; saveWallet(); }
+  busy = true; $('open').disabled = true; refreshEconomy();
+  backTo = !quiet && window.scrollY > 40 ? window.scrollY : null;          // opened from further down the page: scroll up to the reels, and come back afterwards
+  if (backTo !== null) window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.querySelectorAll('.case').forEach(el => el.style.pointerEvents = 'none');
+  $('idle').style.display = 'none';
+  ctx().resume?.(); if (!quiet) snd('open', .8);
+
+  // The outcomes are decided up front; the reels just animate to them.
+  const drops = Array.from({ length: n }, () => { const d = rollDrop(cur); d.free = !!info?.free; d.auto = autoSellRule(d); return d; });
+  if (!quiet){ n === 1 ? buildResult(drops[0]) : buildMulti(drops); $('result').classList.add('preload'); }          // laid out but invisible, so the card is ready to show when the bars stop
+  $('stage').style.setProperty('--rh', ROW_H[n] + 'px'); $('stage').classList.toggle('multi', n > 1);
+  const wasShut = $('reelSec').classList.contains('collapsed');
+  $('reelSec').classList.remove('collapsed');                          // the reel opens out from nothing, pushing the cases down
+  $('stage').style.height = (n * ROW_H[n] + (n - 1) + 2) + 'px';
+  $('reels').innerHTML = drops.map(() => '<div class="reel"><div class="strip"></div></div>').join('');
+  const strips = [...document.querySelectorAll('#reels .strip')], W = $('stage').clientWidth;
+  const winIdx = strips.map((s, k) => buildStrip(drops[k].item, s));
+  // have the tile pictures decoded before the bars start (at most half a second), instead of decoding them as they scroll in
+  const seenSrc = new Set(), decoded = Promise.all(strips.flatMap(s => [...s.querySelectorAll('img')]).filter(i => !seenSrc.has(i.src) && seenSrc.add(i.src)).map(i => i.decode().catch(() => {})));   // each picture once, not once per tile
+  await Promise.race([decoded, new Promise(r => setTimeout(r, 500))]);
+  if (wasShut) await new Promise(r => setTimeout(r, 520));            // let it finish opening before the spin starts
+  anims = strips.map((strip, k) => {
+    const offset = (rand() - 0.5) * PITCH * 0.76;            // land anywhere inside the winning tile
+    const end = -(winIdx[k] * PITCH + PITCH / 2 + offset - W / 2);
+    return strip.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${end}px)` }],       // one long slowing run, straight onto the item
+      { duration: SPIN_MS, easing: 'cubic-bezier(.12,.62,.08,1)', fill: 'forwards' });
+  });
+  anim = anims[0];
+
+  let last = -1;
+  const loop = () => {
+    if (!anim || anim.playState === 'finished') return;
+    const x = new DOMMatrixReadOnly(getComputedStyle(strips[0]).transform).m41;
+    const idx = Math.floor((W / 2 - x) / PITCH);
+    if (idx !== last){ if (last !== -1 && !quiet) tick(); last = idx; }
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+
+  try { await Promise.all(anims.map(a => a.finished)); } catch { return; }
+  if (!quiet){                                                       // the item it landed on stays lit, everything else dims
+    strips.forEach((s, k) => { s.closest('.reel').classList.add('landed'); s.children[winIdx[k]]?.classList.add('hit'); });
+    await new Promise(r => setTimeout(r, 800));
+  }
+  finish(drops, quiet);
+}
+
+function finish(drops, quiet){
+  anim = null; anims = []; busy = false;
+  refreshEconomy();
+  document.querySelectorAll('.case').forEach(el => el.style.pointerEvents = '');
+  stat('opened', drops.length);
+  drops.forEach(d => { stats.rarity[d.item.rarity] = (stats.rarity[d.item.rarity] || 0) + 1; const v = sellPrice(d.item, d.float, d.stattrak, d.free); if (!stats.best || v > stats.best.value) stats.best = { id: d.item.id, wear: d.wear, stattrak: d.stattrak, value: v }; });
+  saveStats();
+  const sold = drops.filter(d => d.auto), sum = sold.reduce((s, d) => s + sellPrice(d.item, d.float, d.stattrak, d.free), 0);
+  if (sum){ const paid = payout(sum); wallet.cents += paid; saveWallet(); refreshEconomy(); stat('soldN', sold.length); stat('soldCents', paid); }
+  drops.filter(d => !d.auto).forEach(d => inventory.unshift({ id: d.item.id, float: d.float, wear: d.wear, stattrak: d.stattrak, t: d.t, uid: d.uid, free: d.free, case: cur.name }));
+  try { localStorage.setItem(STORE, JSON.stringify(inventory.slice(0, INV_MAX))); } catch {}
+  const order = D.rarities.map(r => r.name), best = drops.map(d => d.item.rarity).sort((x, y) => order.indexOf(y) - order.indexOf(x))[0];
+  if (!quiet || order.indexOf(best) >= 2) reveal(best);            // while rolling, only the good ones make a sound
+  if (quiet){
+    drops.forEach(d => feedItems.unshift({ item: d.item, wear: d.wear, sold: !!d.auto, price: sellPrice(d.item, d.float, d.stattrak, d.free) }));
+    feedItems.length = Math.min(feedItems.length, 14); renderFeed(drops.length);
+    if (loopOn && prefs.roll) setTimeout(() => { if (loopOn && prefs.roll) open(true); else { loopOn = false; refreshEconomy(); } }, 350); else { loopOn = false; refreshEconomy(); }
+  }
+  else revealResult();
+  setTimeout(() => { renderInventory(); $('opened').textContent = `${inventory.length} opened`; }, 1200);   // not while the card is appearing
+}
+
+// ---- the reveal card: the skin's picture pops in, then its name, condition and the buttons ----
+let closeTimer = 0, backTo = null;
+function closeResult(){
+  const r = $('result');
+  if (r.classList.contains('preload') || !r.classList.contains('show') || r.classList.contains('closing')) return;
+  r.classList.add('closing');
+  closeTimer = setTimeout(() => {
+    r.classList.remove('show', 'closing');                               // fades out, then goes
+    if (backTo !== null){ window.scrollTo({ top: backTo, behavior: 'smooth' }); backTo = null; }
+  }, 360);
+}
+function showResult(d){ clearTimeout(closeTimer); $('result').classList.remove('closing'); buildResult(d); $('result').classList.add('show'); }
+function revealResult(){ clearTimeout(closeTimer); $('result').classList.remove('preload', 'closing'); $('result').classList.add('show'); }
+function buildResult(d){
+  const it = d.item;
+  $('card').classList.remove('multi');
+  $('card').style.setProperty('--c', it.color); $('result').style.setProperty('--c', it.color);
+  $('flat').innerHTML = itemImg(it, false, d.wear);
+  $('info').innerHTML = `<div class="nm">${d.stattrak ? '<span class="st">StatTrak™</span> ' : ''}${it.name}</div>
+    <div class="sub"><span class="rar">${it.rarity}</span><span>${d.wear}</span></div>${d.auto ? `<div class="sold">Sold ${money(payout(sellPrice(it, d.float, d.stattrak, d.free)))}</div>` : ''}
+    <div class="btns">${d.uid && !d.auto ? `<button id="sellNow" class="alt">Sell ${money(payout(sellPrice(it, d.float, d.stattrak, d.free)))}</button>` : ''}<button id="ok">Nice</button></div>`;
+  $('ok').onclick = closeResult;
+  if (d.uid && !d.auto) $('sellNow').onclick = () => { sellByUid(d.uid); closeResult(); };
+}
+
+// several cases opened at once: a grid of everything that dropped, with one button to sell the lot
+function buildMulti(drops){
+  $('card').classList.add('multi'); $('card').style.setProperty('--c', '#ffffff'); $('result').style.setProperty('--c', '#806cf5');
+  $('flat').innerHTML = '';
+  const left = drops.filter(d => !d.auto), total = left.reduce((s, d) => s + sellPrice(d.item, d.float, d.stattrak, d.free), 0);
+  $('info').innerHTML = `<div class="mgrid">${drops.map((d, k) => `<div class="mc" style="--c:${d.item.color}; --i:${k}"><div class="pic">${itemImg(d.item, false, d.wear)}</div>
+      <div class="mn">${d.stattrak ? '<span class="st">StatTrak™</span> ' : ''}${d.item.name.replace(/^★ /, '')}</div><div class="mw">${d.wear}</div>
+      <div class="mp${d.auto ? ' sold' : ''}">${d.auto ? 'Sold ' : ''}${money(sellPrice(d.item, d.float, d.stattrak, d.free))}</div></div>`).join('')}</div>
+    <div class="btns" style="margin-top:22px">${left.length ? `<button id="sellNow" class="alt">Sell ${left.length < drops.length ? 'rest' : 'all'} ${money(payout(total))}</button>` : ''}<button id="ok">Nice</button></div>`;
+  $('ok').onclick = closeResult;
+  if (left.length) $('sellNow').onclick = () => { sellMany(left); closeResult(); };
+}
+
+// ---------------- money ----------------
+// A wallet (cents) and keys per case, saved in the browser. The cheapest case (by what its skins are worth) is free to open; every
+// other case needs a key bought for that case. Skins can be sold for their price. There is no market data in the project, so a price
+// comes from the skin's rarity, wear, StatTrak, and a fixed per-skin factor (a few skins are worth much more than the rest).
+const WALLET = 'unboxd.wallet.v1';
+let wallet = { cents: 0, keys: {} };
+try { Object.assign(wallet, JSON.parse(localStorage.getItem(WALLET) || '{}')); } catch {}
+wallet.keys ||= {};
+const saveWallet = () => { try { localStorage.setItem(WALLET, JSON.stringify(wallet)); } catch {} };
+const money = c => '$' + (c / 100).toFixed(2);
+const hash01 = s => { let h = 2166136261; for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967295; };
+const TIER_BASE = { 'Mil-Spec Grade': 22, 'Restricted': 80, 'Classified': 300, 'Covert': 1200 };      // cents, Factory New
+const KNIFE_BASE = [['Karambit', 1500], ['Butterfly', 1300], ['Talon', 1100], ['Skeleton', 950], ['M9 Bayonet', 900], ['Stiletto', 700], ['Bayonet', 600],
+  ['Ursus', 420], ['Flip', 380], ['Bowie', 360], ['Huntsman', 300], ['Classic', 250], ['Gut', 230], ['Falchion', 220], ['Paracord', 210], ['Shadow Daggers', 200],
+  ['Survival', 190], ['Nomad', 180], ['Navaja', 170], ['Kukri', 160]];                                  // dollars, for a skin on that knife
+const WEAR_MUL = { 'Factory New': 1, 'Minimal Wear': .82, 'Field-Tested': .62, 'Well-Worn': .52, 'Battle-Scarred': .45 };
+function basePrice(it){
+  let base = TIER_BASE[it.rarity];
+  if (base === undefined){                                  // rare special: knives (and gloves)
+    const k = KNIFE_BASE.find(([n]) => it.name.includes(n));
+    base = (k ? k[1] : 300) * 100;
+    if (!it.name.includes('|')) base *= .55;                // a plain knife with no skin
+  }
+  const h = hash01(it.id);
+  return base * (0.55 + h * h * 2.2);                       // most skins sit low, a few are far dearer
+}
+let PRICES = null;                                          // data/prices.json (real market prices, cents), made by scripts/fetch_prices.py
+function priceOf(it, float, stattrak){
+  let bi = D.wear_bands.findIndex(w => float < w.max); if (bi < 0) bi = D.wear_bands.length - 1;
+  const band = D.wear_bands[bi];
+  const real = PRICES && (stattrak ? PRICES.st[it.id] : PRICES.p[it.id]);
+  let p;
+  if (real && real[bi] > 0){
+    p = real[bi] * (0.94 + 0.12 * (1 - (float - band.min) / ((band.max - band.min) || 1)));      // a lower float within a wear is worth a bit more
+  } else {
+    p = basePrice(it) * (WEAR_MUL[band.name] ?? .5);
+    p *= 1 + 0.12 * (1 - (float - band.min) / ((band.max - band.min) || 1));
+    if (stattrak) p *= PRICES?.st_ratio || 2.4;
+  }
+  return Math.max(1, Math.round(p));
+}
+const caseInfo = {}, keyInfo = {};
+let KEYS = [];
+const FREE_SELL = 0.65;                   // the free case needs no key, but what it gives sells for a bit less
+function computeCases(){
+  const list = D.cases.map(c => {
+    const pool = poolFor(c), tiers = D.rarities.filter(r => pool[r.name].length), total = tiers.reduce((s, r) => s + r.odds, 0);
+    const ev = tiers.reduce((s, r) => {
+      const avg = pool[r.name].reduce((t, id) => { const it = D.items[id], mid = (it.min_float + it.max_float) / 2; return t + priceOf(it, mid, false) * (it.stattrak ? 1.14 : 1); }, 0) / pool[r.name].length;
+      return s + r.odds / total * avg;
+    }, 0);
+    return { c, ev };
+  });
+  const cheapest = list.reduce((a, b) => b.ev < a.ev ? b : a);
+  list.forEach(({ c, ev }) => { caseInfo[c.id] = { ev, free: c === cheapest.c, key: null }; });
+  // Every case has a key of its own, priced for that case alone. (In the real game some keys open several cases, but then the weak cases
+  // of a key are traps that lose money whatever you do, so here each case gets its own key, with the artwork of the key it really uses.)
+  const art = {}; KEYS.forEach(k => k.cases.forEach(id => { art[id] ||= k; }));
+  D.cases.forEach(c => {
+    const k = art[c.id], id = 'key-' + c.id, price = Math.max(49, Math.ceil(caseInfo[c.id].ev * KEY_MARKUP / 10) * 10 - 1);
+    keyInfo[id] = { id, name: c.name + ' Key', image: k ? k.image : c.image, cases: [c.id], price, onlyFree: caseInfo[c.id].free };
+    caseInfo[c.id].key = keyInfo[id];
+  });
+  // keys saved earlier: one for a case, or one that used to open several cases, becomes a key for that case (or the first of them)
+  const first = {}; KEYS.forEach(k => { first[k.id] = k.cases.find(id => caseInfo[id]); });
+  Object.keys(wallet.keys).forEach(id => {
+    const to = keyInfo[id] ? id : caseInfo[id] ? caseInfo[id].key.id : first[id] ? caseInfo[first[id]].key.id : null;
+    if (to && to !== id){ wallet.keys[to] = (wallet.keys[to] || 0) + wallet.keys[id]; delete wallet.keys[id]; }
+    else if (!to) delete wallet.keys[id];
+  });
+  saveWallet();
+}
+const keyCount = id => wallet.keys[id] || 0;
+const caseKeys = caseId => keyCount(caseInfo[caseId].key.id);
+let keyMsg = '';
+function renderCounts(avail){          // 1-5 buttons; the ones you don't have keys for are greyed out
+  if (openCount > Math.max(1, avail)) openCount = Math.max(1, avail);
+  $('countBar').style.display = '';
+  $('counts').innerHTML = [1, 2, 3, 4, 5].map(k => `<button data-n="${k}" class="${k === openCount ? 'on' : ''}" ${busy || k > avail ? 'disabled' : ''}>${k}</button>`).join('');
+}
+$('counts').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled && !busy){ openCount = +b.dataset.n; refreshEconomy(); } };
+// ---- daily reward: once every 24 hours; claim again within 48 hours to keep the streak going. After day 7 every day pays the day-7 amount until a day is missed ----
+const DAILY = [100, 150, 200, 300, 400, 500, 1000];                 // cents, day 1 to day 7
+const DAY_MS = 24 * 3600 * 1000;
+function dailyState(){
+  const d = wallet.daily || { last: 0, streak: 0 }, since = Date.now() - d.last;
+  const idx = d.last && since < 2 * DAY_MS ? Math.min(d.streak, 6) : 0;      // which day of the streak the next claim is: it stays on day 7 until a day is missed
+  return { idx, ready: since >= DAY_MS, wait: Math.max(0, DAY_MS - since) };
+}
+const dailyIn = ms => { const m = Math.ceil(ms / 60000), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : `${m}m`; };
+function renderDaily(){
+  const s = dailyState(), b = $('daily'); if (!b) return;
+  b.classList.toggle('ready', s.ready); $('dailyT').textContent = s.ready ? 'Daily ' + money(dailyAmt(s.idx)) : dailyIn(s.wait);
+}
+async function openDaily(){
+  const s = dailyState();
+  const days = DAILY.map((c, i) => `<div class="d7${i < s.idx ? ' done' : i === s.idx ? ' now' : ''}">Day ${i + 1}${i === 6 ? '+' : ''}<b>${money(dailyAmt(i))}</b></div>`).join('');
+  const html = `Daily reward<div class="dayrow">${days}</div><small>${s.ready ? 'Come back every day to keep your streak going. Day 7 pays every day after.' : 'Next reward in ' + dailyIn(s.wait) + '.'}</small>`;
+  if (!s.ready){ await askConfirm(html, { ok: 'Close', single: true, wide: true }); return; }
+  if (await askConfirm(html, { ok: 'Claim ' + money(dailyAmt(s.idx)), cancel: 'Later', wide: true })){
+    const again = dailyState(); if (!again.ready) return;
+    wallet.cents += dailyAmt(again.idx); stat('dailyN'); stat('dailyCents', dailyAmt(again.idx)); wallet.daily = { last: Date.now(), streak: again.idx + 1 }; saveWallet(); refreshEconomy(); snd('coin', .7);
+  }
+}
+$('daily').onclick = openDaily;
+setInterval(renderDaily, 30000);
+function refreshEconomy(){
+  if (!D || !caseInfo[D.cases[0].id]) return;
+  $('wallet').innerHTML = money(wallet.cents) + '<small>balance</small>';
+  const owned = Object.values(wallet.keys).reduce((s, n) => s + n, 0);
+  $('keyBadge').textContent = owned || '';
+  document.querySelectorAll('[data-price]').forEach(el => {
+    const i = caseInfo[el.dataset.price]; if (!i) return;
+    el.textContent = i.free ? 'FREE' : money(i.key.price); el.classList.toggle('free', i.free);
+  });
+  document.querySelectorAll('[data-own]').forEach(el => { const i = caseInfo[el.dataset.own]; const n = i && !i.free ? keyCount(i.key.id) : 0; el.textContent = n ? '×' + n : ''; });
+  if (cur && caseInfo[cur.id]){
+    const i = caseInfo[cur.id];
+    if (i.free){
+      const c = openCount;
+      $('keybar').innerHTML = '';
+      renderCounts(5);
+      $('open').textContent = c > 1 ? `Open ${c} cases` : 'Open case';
+      $('open').disabled = busy;
+      $('open').title = '';
+    } else {
+      const n = caseKeys(cur.id);
+      $('keybar').innerHTML = `<img src="${i.key.image}" alt="" title="${i.key.name} · ${money(i.key.price)}" style="height:34px"><b class="kn">×${n}</b>
+        <button id="getKeys">Buy keys</button>${keyMsg ? `<span class="msg">${keyMsg}</span>` : ''}`;
+      const c = Math.min(openCount, maxCount());
+      renderCounts(Math.min(5, n));
+      $('open').textContent = c > 1 ? `Open ${c} cases (${c} keys)` : 'Open case (1 key)';
+      $('open').disabled = busy || n < 1;
+      $('open').title = n < 1 ? 'You need a key for this case' : '';
+      $('getKeys').onclick = () => goBuyKey(i.key.id);
+    }
+    if (loopOn){ $('open').textContent = 'Stop'; $('open').disabled = false; }
+  }
+  renderKeys(); renderDaily();
+  if ($('v-rebirth').classList.contains('on')) renderRebirth();
+}
+// "Buy keys" on a case takes you to the Keys page, to the key that opens it, and lights that key up for a few seconds
+function goBuyKey(keyId){
+  keyQuery = ''; keyFilter = 'all'; $('keySearch').value = ''; showView('keys'); renderKeys();
+  requestAnimationFrame(() => {
+    const el = document.querySelector(`.keycard[data-k="${keyId}"]`); if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 3800);
+  });
+}
+let keyQuery = '', keySort = 'price', keyFilter = 'all';
+const keyQty = {};                               // how many of each key the stepper is set to
+const KEY_MAX = 20;
+function renderKeys(){
+  if (!$('keysGrid') || !Object.keys(keyInfo).length) return;
+  const all = Object.values(keyInfo).filter(k => !k.onlyFree);
+  const q = keyQuery.trim().toLowerCase();
+  const list = all.filter(k => (!q || (k.name + ' ' + k.cases.map(id => caseById[id].name).join(' ')).toLowerCase().includes(q))
+    && (keyFilter === 'all' || (keyFilter === 'buy' ? wallet.cents >= k.price : keyCount(k.id) > 0)))
+    .sort({ price: (a, b) => a.price - b.price, dear: (a, b) => b.price - a.price, name: (a, b) => a.name.localeCompare(b.name), cases: (a, b) => b.cases.length - a.cases.length || a.price - b.price }[keySort]);
+  $('keysGrid').innerHTML = list.map(k => {
+    const n = keyCount(k.id), qty = Math.max(1, Math.min(keyQty[k.id] || 1, KEY_MAX)), cost = k.price * qty, first = caseById[k.cases[0]];
+    return `<div class="keycard" data-k="${k.id}" style="--k:${KEY_TINT(k)}">${n ? `<span class="own">×${n}</span>` : ''}<img class="key" src="${k.image}" alt="" loading="lazy">
+      <div class="kn">${k.name}</div>
+      <div class="kc">${k.cases.slice(0, 4).map(id => `<img src="${caseById[id].image}" alt="" title="${caseById[id].name}" loading="lazy">`).join('')}</div>
+      <div class="kbuy"><div class="step"><button data-step="-1" data-k="${k.id}" ${qty <= 1 ? 'disabled' : ''}>−</button><b>${qty}</b><button data-step="1" data-k="${k.id}" ${qty >= KEY_MAX ? 'disabled' : ''}>+</button></div>
+        <button class="buy" data-buy="${k.id}" ${wallet.cents < cost ? 'disabled' : ''}>${wallet.cents < cost ? 'Need ' + money(cost - wallet.cents) : 'Buy ' + money(cost)}</button></div></div>`;
+  }).join('') || `<div class="empty" style="grid-column:1/-1;padding:30px 0;color:var(--muted)">${keyFilter === 'own' ? 'You have no keys yet.' : 'No keys match.'}</div>`;
+  document.querySelectorAll('#keysFilters .chip').forEach(c => c.classList.toggle('on', c.dataset.f === keyFilter));
+  const mine = all.filter(k => keyCount(k.id) > 0).sort((a, b) => keyCount(b.id) - keyCount(a.id));
+  const total = mine.reduce((s, k) => s + keyCount(k.id), 0);
+  $('keysSide').innerHTML = `<div class="bal"><small>Your balance</small><b>${money(wallet.cents)}</b></div>
+    <div class="hint">Each opening uses one key. The free case needs none. Sell skins in your inventory to earn more.</div>
+    <h3>Your keys${total ? ' · ' + total : ''}</h3>
+    ${mine.length ? mine.map(k => `<div class="ok"><img src="${k.image}" alt=""><div class="t">${k.name}<span>${k.cases.length > 1 ? k.cases.length + ' cases' : caseById[k.cases[0]].name}</span></div><div class="n">×${keyCount(k.id)}</div></div>`).join('') : '<div class="hint">None yet. Pick a key on the left.</div>'}`;
+}
+// each key gets a tint from its artwork's usual colour family, so the shop isn't one flat grey
+const KEY_TINTS = ['#ff9f1c', '#4b8bff', '#d32ce6', '#3ddc84', '#eb4b4b', '#26c6da', '#ffd54a'];
+const KEY_TINT = k => KEY_TINTS[Math.floor(hash01(k.id) * KEY_TINTS.length)];
+function buyKeys(id, n){
+  const k = keyInfo[id], cost = k.price * n;
+  if (wallet.cents < cost) return;
+  wallet.cents -= cost; wallet.keys[id] = keyCount(id) + n; keyMsg = ''; stat('keysBought', n); stat('keysSpent', cost); saveWallet(); refreshEconomy(); snd('key', .8);
+}
+const sellPrice = (it, float, stattrak, free) => Math.max(1, Math.round(priceOf(it, float, stattrak) * (free ? FREE_SELL : 1)));
+const valueOf = i => sellPrice(D.items[i.id], i.float, i.stattrak, i.free);
+function sellByUid(uid){
+  const n = inventory.findIndex(i => i.uid === uid); if (n < 0) return 0;
+  const i = inventory[n]; if (i.locked) return 0;
+  const v = D.items[i.id] ? valueOf(i) : 0;
+  inventory.splice(n, 1); const paid = payout(v); wallet.cents += paid; saveWallet(); stat('soldN'); stat('soldCents', paid);
+  try { localStorage.setItem(STORE, JSON.stringify(inventory.slice(0, INV_MAX))); } catch {}
+  renderInventory(); refreshEconomy(); snd('coin', .7);
+  return v;
+}
+// sells many at once: one pass over the inventory, one save and one redraw (selling one by one redrew the whole grid every time)
+function sellMany(list){
+  const drop = new Set(list.filter(i => !i.locked).map(i => i.uid)); if (!drop.size) return 0;
+  let v = 0, n = 0;
+  inventory.forEach(i => { if (drop.has(i.uid)){ v += D.items[i.id] ? valueOf(i) : 0; n++; } });
+  inventory = inventory.filter(i => !drop.has(i.uid));
+  const paid = payout(v); wallet.cents += paid; saveWallet(); stat('soldN', n); stat('soldCents', paid);
+  saveInv(); renderInventory(); refreshEconomy(); snd('coin', .7);
+  return v;
+}
+inventory.forEach(i => { i.uid ||= Math.random().toString(36).slice(2) + String(i.t); });      // items saved before selling existed
+
+let invFilter = 'All', invQuery = '', invSort = 'new', invSel = null;
+const WEAR_SHORT = { 'Factory New': 'FN', 'Minimal Wear': 'MW', 'Field-Tested': 'FT', 'Well-Worn': 'WW', 'Battle-Scarred': 'BS' };
+const INV_FILTERS = ['All', 'Pistols', 'SMGs', 'Rifles', 'Heavy', 'Knives', 'Gloves', 'StatTrak'];
+const rarityRank = name => D.rarities.findIndex(r => r.name === name);          // 0 = most common
+function invMatches(i){
+  const it = D.items[i.id]; if (!it) return false;
+  if (invFilter === 'StatTrak' ? !i.stattrak : (invFilter !== 'All' && it.category !== invFilter)) return false;
+  const q = invQuery.trim().toLowerCase();
+  return !q || (it.name + ' ' + i.wear + ' ' + (i.case || '') + (i.stattrak ? ' stattrak' : '')).toLowerCase().includes(q);
+}
+function invSorted(list){
+  const key = { new: null, value: (a, b) => valueOf(b) - valueOf(a), rarity: (a, b) => rarityRank(D.items[b.id].rarity) - rarityRank(D.items[a.id].rarity) || valueOf(b) - valueOf(a),
+    name: (a, b) => D.items[a.id].name.localeCompare(D.items[b.id].name), wear: (a, b) => a.float - b.float }[invSort];
+  return key ? [...list].sort(key) : list;                 // the inventory is already newest first
+}
+function renderInventory(){
+  const have = inventory.filter(i => D.items[i.id]);
+  $('invBadge').textContent = inventory.length ? (inventory.length > 99 ? '99+' : inventory.length) : '';
+  const total = have.reduce((s, i) => s + valueOf(i), 0);
+  $('invTotal').innerHTML = have.length ? `<b>${money(total)}</b>` : '';
+  $('sellAll').style.display = have.length ? '' : 'none'; $('clear').style.display = have.length ? '' : 'none';
+  // filter chips with how many each holds
+  const cnt = f => f === 'All' ? have.length : f === 'StatTrak' ? have.filter(i => i.stattrak).length : have.filter(i => D.items[i.id].category === f).length;
+  $('invFilters').innerHTML = INV_FILTERS.filter(f => f === 'All' || cnt(f)).map(f => `<button class="chip${f === invFilter ? ' on' : ''}" data-f="${f}">${f} <span style="opacity:.7">${cnt(f)}</span></button>`).join('');
+  if (invFilter !== 'All' && !cnt(invFilter)) invFilter = 'All';
+  const list = invSorted(have.filter(invMatches));
+  $('invGrid').innerHTML = list.length ? list.map(i => {
+    const it = D.items[i.id], skin = it.pattern || it.name.replace(/^★ /, '');
+    return `<div class="icard${i.uid === invSel ? ' sel' : ''}" data-uid="${i.uid}" style="--c:${it.color}" title="${it.name} (${i.wear})">
+      <div class="top">${i.locked ? '<svg class="lk" viewBox="0 0 24 24" aria-label="Locked"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>' : ''}${i.stattrak ? '<span class="st">StatTrak™</span>' : ''}<span class="wr">${WEAR_SHORT[i.wear] || ''}</span></div>
+      ${itemImg(it, false, i.wear)}<div class="wn">${it.weapon}</div><div class="sn">${skin}</div><div class="pr">${money(valueOf(i))}</div></div>`;
+  }).join('') : `<div class="empty" style="grid-column:1/-1;padding:30px 0">${have.length ? 'No items match.' : 'Nothing yet. Open a case.'}</div>`;
+  renderDetail();
+}
+function renderDetail(){
+  const i = inventory.find(x => x.uid === invSel), it = i && D.items[i.id];
+  if (!it){ invSel = null; $('invDetail').innerHTML = '<div class="hint"></div>'; return; }
+  const skin = it.pattern || it.name;
+  $('invDetail').style.setProperty('--c', it.color);
+  $('invDetail').innerHTML = `<div class="dimg">${itemImg(it, false, i.wear)}</div>
+    <div><div class="dw">${it.weapon}</div><div class="dn">${i.stattrak ? '<span class="st">StatTrak™</span> ' : ''}${skin}</div></div>
+    <div class="dr">${it.rarity}</div>
+    <dl><dt>Condition</dt><dd>${i.wear}</dd><dt>Type</dt><dd>${it.category}</dd>${i.case ? `<dt>From</dt><dd>${i.case}</dd>` : ''}<dt>Value</dt><dd class="val">${money(valueOf(i))}</dd></dl>
+    <div class="btns"><button id="dSell" class="sell">Sell ${money(valueOf(i))}</button></div>`;
+  $('dSell').onclick = () => { sellByUid(i.uid); };
+}
+
+// ---------------- upgrader ----------------
+// Stake some of your items against a pricier target. The chance to win is stake value / target value, less the house's cut
+// (EDGE); one roll decides, a win gives the target, a loss costs the stake. The roll is made, the stake taken and the result saved
+// before the wheel moves, so closing the page mid-spin cannot change the outcome.
+// ---- rebirth: pay a big fee for permanent bonuses. Skins keep their normal value everywhere (so upgrading and merging can't be gamed);
+// the bonus is only added to money you receive: selling, the daily reward and the bank. It does not change drop odds. ----
+const REB_COST = [2000, 5000, 12000, 28000, 65000, 150000, 350000, 800000, 1800000, 4000000].map(d => d * 100);      // cents, for rebirth 1 to 10
+const REB_CASH = 0.01, REB_BANK = 0.10, REB_DAILY = 0.10;                                                          // per rebirth
+const rebLevel = () => Math.min(REB_COST.length, wallet.reb || 0);
+const payout = v => Math.round(v * (1 + REB_CASH * rebLevel()));
+const dailyAmt = i => Math.round(DAILY[i] * (1 + REB_DAILY * rebLevel()));
+const KEY_MARKUP = 0.95;                  // a key costs this share of what its case pays back on average (under 1: opening is a little better than even)
+const UP_EDGE = 0.04, UP_MIN = 0.005, UP_MAX = 0.90, UP_KEY = 'unboxd.upgrade.v1';
+let upSel = new Set(), upTarget = null, upBusy = false, upPool = null;
+const upQuery = { mine: '', targets: '' };
+function saveInv(){ try { localStorage.setItem(STORE, JSON.stringify(inventory.slice(0, INV_MAX))); } catch {} }
+function wearFloatRange(it, wear){
+  const band = D.wear_bands.find(w => w.name === wear); if (!band) return null;
+  const lo = Math.max(band.min, it.min_float), hi = Math.min(band.max, it.max_float);
+  return lo < hi ? [lo, hi] : (lo === hi ? [lo, lo] : null);
+}
+function targetPool(){        // every skin in every condition it can have, with its price
+  if (upPool) return upPool;
+  upPool = [];
+  Object.values(D.items).forEach(it => it.wears.forEach(w => { const r = wearFloatRange(it, w); if (r) upPool.push({ it, wear: w, range: r, price: priceOf(it, (r[0] + r[1]) / 2, false) }); }));
+  upPool.sort((a, b) => a.price - b.price);
+  return upPool;
+}
+const LOCK_SVG = '<svg class="lk" viewBox="0 0 24 24" aria-label="Locked"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const lockedMsg = c => toast(c && c.classList.contains('vault') ? 'In the vault. Take it out in the Bank first.' : 'Locked. Unlock it in your inventory first.');
+const withVault = () => inventory.concat(bank().items.map(i => ({ ...i, locked: true, vault: true })));     // skins in the bank, shown greyed out in the lists
+const upStake = () => inventory.filter(i => upSel.has(i.uid) && D.items[i.id] && !i.locked);
+const upStakeValue = () => upStake().reduce((s, i) => s + valueOf(i), 0);
+const upChance = (stake, target) => !stake || !target ? 0 : Math.min(UP_MAX, Math.max(UP_MIN, stake / target * (1 - UP_EDGE)));
+const pctText = c => (c * 100 < 10 ? (c * 100).toFixed(2) : (c * 100).toFixed(1)) + '%';
+
+function renderUpgrader(){
+  if (!D || upBusy) return;
+  inventory.forEach(i => { if (upSel.has(i.uid) && !inventory.includes(i)) upSel.delete(i.uid); });
+  const have = new Set(inventory.map(i => i.uid)); [...upSel].forEach(u => { if (!have.has(u)) upSel.delete(u); });
+  const stake = upStakeValue(), q = upQuery.mine.trim().toLowerCase();
+  // --- your items
+  let mine = withVault().filter(i => D.items[i.id] && (!q || (D.items[i.id].name + ' ' + i.wear).toLowerCase().includes(q)));
+  const s = $('upSort').value; if (s === 'value') mine = [...mine].sort((a, b) => valueOf(b) - valueOf(a)); else if (s === 'low') mine = [...mine].sort((a, b) => valueOf(a) - valueOf(b));
+  $('upMine').innerHTML = mine.length ? mine.map(i => { const it = D.items[i.id]; return `<div class="icard${upSel.has(i.uid) ? ' pick' : ''}${i.locked ? ' locked' : ''}${i.vault ? ' vault' : ''}" data-uid="${i.uid}" style="--c:${it.color}" title="${it.name} (${i.wear})">
+      <div class="top">${i.locked ? LOCK_SVG : ''}${i.stattrak ? '<span class="st">StatTrak™</span>' : ''}<span class="wr">${WEAR_SHORT[i.wear] || ''}</span></div>${itemImg(it, false, i.wear)}<div class="wn">${it.weapon}</div><div class="sn">${it.pattern || it.name}</div><div class="pr">${money(valueOf(i))}</div></div>`; }).join('')
+    : `<div class="empty" style="grid-column:1/-1;padding:20px 0">${inventory.length ? 'No items match.' : 'You have nothing to stake yet. Open a case first.'}</div>`;
+  $('upStakeSum').innerHTML = upSel.size ? `<b>${money(stake)}</b>` : '';
+  // --- targets: those that make a real upgrade (a chance between UP_MIN and UP_MAX)
+  const pool = targetPool(), tq = upQuery.targets.trim().toLowerCase();
+  const lo = stake ? stake * (1 - UP_EDGE) / UP_MAX : 0, hi = stake ? stake * (1 - UP_EDGE) / UP_MIN : Infinity;
+  let list = pool.filter(t => t.price >= lo && t.price <= hi && (!tq || (t.it.name + ' ' + t.wear).toLowerCase().includes(tq)));
+  if ($('upTSort').value === 'desc') list = [...list].reverse();
+  const shown = list.slice(0, 80);
+  $('upTargets').innerHTML = shown.length ? shown.map(t => `<div class="icard${upTarget && upTarget.it.id === t.it.id && upTarget.wear === t.wear ? ' pick' : ''}" data-t="${t.it.id}|${t.wear}" style="--c:${t.it.color}" title="${t.it.name} (${t.wear})">
+      <div class="top"><span class="wr">${WEAR_SHORT[t.wear] || ''}</span></div>${itemImg(t.it, false, t.wear)}<div class="wn">${t.it.weapon}</div><div class="sn">${t.it.pattern || t.it.name.replace(/^★ /, '')}</div><div class="pr">${money(t.price)}${stake ? ' ' + pctText(upChance(stake, t.price)) : ''}</div></div>`).join('')
+      + (list.length > shown.length ? `<div class="empty" style="grid-column:1/-1;padding:6px 0;font-size:11px">${list.length - shown.length} more - search or change the sort to find them</div>` : '')
+    : `<div class="empty" style="grid-column:1/-1;padding:20px 0">${stake ? 'No skin matches that.' : 'Select items to stake and the targets you can reach appear here.'}</div>`;
+  $('upMults').innerHTML = [1.5, 2, 3, 5, 10, 25, 100].map(m => `<button class="chip" data-m="${m}" ${stake ? '' : 'disabled'}>×${m}</button>`).join('');
+  updateWheel();
+}
+function updateWheel(){
+  if (upBusy) return;
+  const items = upStake(), stake = upStakeValue(), t = upTarget, chance = t ? upChance(stake, t.price) : 0;
+  const top = [...items].sort((a, b) => valueOf(b) - valueOf(a))[0], topIt = top && D.items[top.id];
+  $('upMineCard').className = 'upcard' + (top ? '' : ' empty'); $('upMineCard').style.setProperty('--c', topIt ? topIt.color : '#312f3d');
+  $('upMineCard').innerHTML = top ? `<span class="lbl">Stake</span>${items.length > 1 ? `<span class="more">+${items.length - 1}</span>` : ''}${itemImg(topIt, false, top.wear)}<div class="tn">${items.length > 1 ? items.length + ' skins' : (topIt.pattern || topIt.name.replace(/^★ /, ''))}</div><div class="tw">${items.length > 1 ? topIt.weapon + ' and more' : top.wear}</div><div class="pr">${money(stake)}</div>`
+    : `<span class="lbl">Stake</span><div class="tw">Pick your skins below</div>`;
+  $('upTargetCard').className = 'upcard' + (t ? '' : ' empty'); $('upTargetCard').style.setProperty('--c', t ? t.it.color : '#312f3d');
+  $('upTargetCard').innerHTML = t ? `<span class="lbl">Target</span>${itemImg(t.it, false, t.wear)}<div class="tn">${t.it.pattern || t.it.name.replace(/^★ /, '')}</div><div class="tw">${t.wear}</div><div class="pr">${money(t.price)}</div>`
+    : `<span class="lbl">Target</span><div class="tw">Pick a skin to aim for</div>`;
+  $('upArc').setAttribute('stroke-dasharray', `${chance * 276.46} 276.46`);
+  $('upPct').innerHTML = t && stake ? `<b>${pctText(chance)}</b><small>×${(t.price / stake).toFixed(2)}</small>` : `<b class="off">0%</b>`;
+  $('upTargetSum').innerHTML = '';
+  $('upGo').disabled = !(t && stake > 0 && t.price > stake);
+}
+function pickTarget(id, wear){
+  const t = targetPool().find(x => x.it.id === id && x.wear === wear); if (!t) return;
+  upTarget = upTarget && upTarget.it.id === id && upTarget.wear === wear ? null : t; renderUpgrader();
+}
+function upBeep(win){ snd(win ? 'coin' : 'deny', .8); }
+function finishUpgrade(res){
+  // apply a saved result: the stake was already taken; a win adds the target
+  localStorage.removeItem(UP_KEY);
+  if (res.win){
+    const it = D.items[res.id];
+    inventory.unshift({ id: res.id, float: res.float, wear: res.wear, stattrak: false, t: Date.now(), uid: res.uid, free: false, case: 'Upgrader' });
+    saveInv();
+  }
+  renderInventory(); refreshEconomy();
+}
+async function doUpgrade(){
+  const stakeItems = upStake(), stake = upStakeValue(), t = upTarget;
+  if (upBusy || !t || !stakeItems.length || t.price <= stake) return;
+  upBusy = true; $('upGo').disabled = true;
+  const chance = upChance(stake, t.price), roll = rand(), win = roll < chance;
+  stat('upN'); stat('upStaked', stake); if (win){ stat('upWin'); stat('upWonCents', t.price); }
+  const fl = t.range[0] + rand() * (t.range[1] - t.range[0]);
+  const res = { win, id: t.it.id, wear: t.wear, float: fl, uid: Math.random().toString(36).slice(2) + Date.now().toString(36), lost: stakeItems.length, lostValue: stake, name: t.it.name };
+  // stake out, outcome saved - before anything moves
+  const gone = new Set(stakeItems.map(i => i.uid)); inventory = inventory.filter(i => !gone.has(i.uid)); upSel.clear(); saveInv();
+  try { localStorage.setItem(UP_KEY, JSON.stringify(res)); } catch {}
+  renderInventory();
+  ctx().resume?.();
+  // the white marker travels round the ring and stops at the roll (the green arc is the first `chance` of the ring, clockwise from the top)
+  const needle = $('upNeedle'), end = 360 * 5 + roll * 360;
+  needle.animate([{ transform: 'rotate(0deg)' }, { transform: `rotate(${end}deg)` }], { duration: 5000, easing: 'cubic-bezier(.12,.62,.08,1)', fill: 'forwards' });
+  const tick = setInterval(() => snd('tick', .4), 140); setTimeout(() => clearInterval(tick), 3600);
+  await new Promise(r => setTimeout(r, 5100));
+  const box = $('upResult');
+  if (!win){ box.className = 'show lose'; box.textContent = 'Lost ' + money(stake); }       // a win goes straight to the item
+  upBeep(win);
+  finishUpgrade(res);
+  await new Promise(r => setTimeout(r, win ? 500 : 2200));
+  box.className = ''; box.textContent = ''; needle.getAnimations().forEach(a => a.cancel()); 
+  upBusy = false; upTarget = win ? null : upTarget;
+  if (win) showResult({ item: t.it, float: fl, wear: t.wear, stattrak: false, uid: res.uid, free: false });
+  renderUpgrader();
+}
+// ---------------- merge ----------------
+// Two skins of the same weapon always merge into ONE skin of that weapon, and what you get is worth a little MORE than the two together:
+// 3% more (at least a cent). The skin is the one of that weapon closest to that value; if the nearest skin would be much dearer, you get
+// the best skin that is a bit cheaper and the difference in cash instead, so the total is always right. A skin that came out of a merge
+// carries no bonus, so merging merged skins can't pile it up (it still never loses). No luck involved.
+const MG_KEY = 'unboxd.merge.v1', MERGE_BONUS = 0.03, MERGE_SLACK = 0.10;
+let mgSel = [], mgBusy = false, mgQuery = '', mgSort = 'value';
+const mgItems = () => mgSel.map(u => inventory.find(i => i.uid === u)).filter(i => i && D.items[i.id]);
+function mgPlan(items){
+  if (items.length !== 2) return null;
+  const w = D.items[items[0].id].weapon;
+  if (D.items[items[1].id].weapon !== w) return null;
+  const vals = items.map(valueOf), V = vals[0] + vals[1], best = Math.max(...vals), bonus = items.some(i => i.merged) ? 0 : MERGE_BONUS;
+  const target = Math.max(V + 1, Math.ceil(V * (1 + bonus))), cap = Math.ceil(V * (1 + MERGE_SLACK)) + 1;
+  let up = null, below = null;                                           // the closest skin that reaches the target, and the best one under it
+  targetPool().filter(x => x.it.weapon === w).forEach(x => {
+    const lo = x.range[0], hi = x.range[1], at = f => sellPrice(x.it, f, false, false);
+    if (at(lo) >= target){                                                // can reach the target: use the highest float that still does
+      let float = hi, value = at(hi);
+      if (value < target){ let a = lo, b = hi; for (let k = 0; k < 24; k++){ const m = (a + b) / 2; if (at(m) >= target) a = m; else b = m; } float = a; value = at(a); }
+      if (value <= cap && (!up || value < up.value)) up = { it: x.it, wear: x.wear, float, value };
+    } else if (at(lo) > best && (!below || at(lo) > below.value)) below = { it: x.it, wear: x.wear, float: lo, value: at(lo) };
+  });
+  if (up) return { w, V, out: up, cash: 0 };
+  if (below) return { w, V, out: below, cash: target - below.value };
+  return { none: true, w, V };
+}
+function mgSlot(el, i, label){
+  const it = i && D.items[i.id];
+  el.className = 'upcard' + (it ? '' : ' empty'); el.style.setProperty('--c', it ? it.color : '#312f3d'); el.dataset.uid = it ? i.uid : '';
+  el.innerHTML = it ? `<span class="lbl">${label}</span>${itemImg(it, false, i.wear)}<div class="tn">${it.pattern || it.name.replace(/^★ /, '')}</div><div class="tw">${i.wear}</div><div class="pr">${money(valueOf(i))}</div>`
+    : `<span class="lbl">${label}</span><div class="tw">Pick a skin below</div>`;
+}
+function renderMerge(){
+  if (!D || mgBusy) return;
+  mgSel = mgSel.filter(u => inventory.some(i => i.uid === u));
+  const items = mgItems(), plan = mgPlan(items);
+  mgSlot($('mgA'), items[0], 'First'); mgSlot($('mgB'), items[1], 'Second');
+  const out = $('mgOutCard'), o = plan && plan.out;
+  out.className = 'upcard' + (o ? '' : ' empty'); out.style.setProperty('--c', o ? o.it.color : '#312f3d');
+  if (o) out.innerHTML = `<span class="lbl">Result</span>${itemImg(o.it, false, o.wear)}<div class="tn">${o.it.pattern || o.it.name.replace(/^★ /, '')}</div><div class="tw">${o.wear}</div><div class="pr">${money(o.value)}</div>${plan.cash > 0 ? `<div class="tw" style="color:var(--green)">+ ${money(plan.cash)} cash</div>` : ''}`;
+  else out.innerHTML = `<span class="lbl">Result</span><div class="tw">${items.length === 2 ? (plan ? 'No skin of this weapon is worth that much' : 'They must be the same weapon') : 'Pick two of the same weapon'}</div>`;
+  $('mgGo').disabled = !(plan && plan.out);
+  // the list: once one is picked, only the same weapon is shown
+  const first = items[0] && D.items[items[0].id], q = mgQuery.trim().toLowerCase();
+  let mine = withVault().filter(i => D.items[i.id] && (!first || D.items[i.id].weapon === first.weapon) && (!q || (D.items[i.id].name + ' ' + i.wear).toLowerCase().includes(q)));
+  if (mgSort === 'value') mine = [...mine].sort((a, b) => valueOf(b) - valueOf(a)); else if (mgSort === 'low') mine = [...mine].sort((a, b) => valueOf(a) - valueOf(b));
+  $('mgMine').innerHTML = mine.length ? mine.map(i => { const it = D.items[i.id]; return `<div class="icard${mgSel.includes(i.uid) ? ' pick' : ''}${i.locked ? ' locked' : ''}${i.vault ? ' vault' : ''}" data-uid="${i.uid}" style="--c:${it.color}" title="${it.name} (${i.wear})">
+      <div class="top">${i.locked ? LOCK_SVG : ''}${i.stattrak ? '<span class="st">StatTrak™</span>' : ''}<span class="wr">${WEAR_SHORT[i.wear] || ''}</span></div>${itemImg(it, false, i.wear)}<div class="wn">${it.weapon}</div><div class="sn">${it.pattern || it.name}</div><div class="pr">${money(valueOf(i))}</div></div>`; }).join('')
+    : `<div class="empty" style="grid-column:1/-1;padding:20px 0;color:#8f8c9e">${inventory.length ? 'No skins match.' : 'You have no skins yet. Open a case first.'}</div>`;
+}
+function finishMerge(res){
+  localStorage.removeItem(MG_KEY);
+  inventory.unshift({ id: res.id, float: res.float, wear: res.wear, stattrak: false, t: Date.now(), uid: res.uid, free: false, case: 'Merge', merged: true });
+  if (res.cash > 0){ wallet.cents += res.cash; saveWallet(); }
+  saveInv(); renderInventory(); refreshEconomy();
+}
+async function doMerge(){
+  const items = mgItems(), plan = mgPlan(items);
+  if (mgBusy || !plan || !plan.out) return;
+  mgBusy = true; $('mgGo').disabled = true;
+  const pick = plan.out, res = { merged: true, cash: plan.cash || 0, id: pick.it.id, wear: pick.wear, float: pick.float, uid: Math.random().toString(36).slice(2) + Date.now().toString(36) };
+  const gone = new Set(items.map(i => i.uid)); inventory = inventory.filter(i => !gone.has(i.uid)); mgSel = []; saveInv();   // the pair is spent first
+  try { localStorage.setItem(MG_KEY, JSON.stringify(res)); } catch {}
+  renderInventory(); ctx().resume?.();
+  $('mgOutCard').classList.add('busy'); [150, 330, 520, 720].forEach((d, k) => setTimeout(() => snd('click', .8), d));
+  await new Promise(r => setTimeout(r, 1100));
+  finishMerge(res); stat('merges'); upBeep(true);
+  mgBusy = false; $('mgOutCard').classList.remove('busy'); renderMerge();
+  showResult({ item: pick.it, float: pick.float, wear: pick.wear, stattrak: false, uid: res.uid, free: false });
+}
+function resumeMerge(){
+  try { const res = JSON.parse(localStorage.getItem(MG_KEY) || 'null'); if (res && D.items[res.id]) finishMerge(res); else localStorage.removeItem(MG_KEY); } catch { localStorage.removeItem(MG_KEY); }
+}
+$('mgMine').onclick = e => {
+  const c = e.target.closest('.icard'); if (!c || mgBusy) return; if (c.classList.contains('locked')) return lockedMsg(c);
+  const u = c.dataset.uid, at = mgSel.indexOf(u);
+  if (at >= 0) mgSel.splice(at, 1); else if (mgSel.length < 2) mgSel.push(u); else return;
+  renderMerge();
+};
+['mgA', 'mgB'].forEach(id => $(id).onclick = () => { const u = $(id).dataset.uid; if (u && !mgBusy){ mgSel = mgSel.filter(x => x !== u); renderMerge(); } });
+$('mgSearch').oninput = e => { mgQuery = e.target.value; renderMerge(); };
+$('mgSort').onchange = e => { mgSort = e.target.value; renderMerge(); };
+$('mgClear').onclick = () => { mgSel = []; renderMerge(); };
+$('mgGo').onclick = doMerge;
+
+// ---------------- trading ----------------
+// Two browsers talk through a message broker. Both sides list the skins and keys they give, both press Confirm, and when both have confirmed
+// the exact same trade each side swaps the skins and keys in its own save.
+// Nothing here can stop a player who edits their own save from offering skins they don't have, so trade with people you trust.
+let tr = null;                                   // { peer, conn, role: 'host' | 'join', open, mine: [uids], theirs: [items], myReady, theirReady }
+const TR_MAX = 20;
+const trMsg = (t, err) => { $('trMsg').textContent = t || ''; $('trMsg').classList.toggle('err', !!err); };
+// A short number is the room two players meet in. The two browsers talk through a small public message broker (MQTT over a secure
+// websocket), so it works from any network with no router settings. Point Settings > Trade server at your own broker to self-host it.
+const TR_BROKER = 'wss://broker.emqx.io:8084/mqtt';
+function trClose(){
+  if (!tr) return; const t = tr; tr = null;
+  try { if (t.peer) t.client.publish(t.topic, JSON.stringify({ id: t.id, k: 'bye' }), { qos: 1 }); t.client.publish(t.topic + '/host', '', { retain: true }); } catch {}
+  setTimeout(() => { try { t.client.end(true); } catch {} }, 400);
+}
+function trDropped(){
+  const was = tr && tr.open; trClose(); renderTrade();
+  trMsg(was ? 'The other player left.' : '', !!was);
+}
+function trSend(m){ if (tr && tr.peer) tr.client.publish(tr.topic, JSON.stringify({ id: tr.id, to: tr.peer, ...m }), { qos: 1 }); }
+function trOpened(){ tr.open = true; trMsg(''); $('trCode').textContent = ''; renderTrade(); }
+function trRecv(t, m){
+  if (!tr || !m || m.id === tr.id) return;
+  if (t.endsWith('/host')){                                                       // a room marker: this code is being hosted
+    if (tr.role === 'join' && !tr.peer && !tr.asked){ tr.asked = true; tr.client.publish(tr.topic, JSON.stringify({ id: tr.id, k: 'join' }), { qos: 1 }); }
+    if (tr.role === 'host') tr.taken = true;
+    return;
+  }
+  if (m.k === 'join' && tr.role === 'host' && !tr.peer){
+    tr.peer = m.id; tr.client.publish(tr.topic + '/host', '', { retain: true });  // the room is full: take the marker down
+    tr.client.publish(tr.topic, JSON.stringify({ id: tr.id, to: m.id, k: 'welcome' }), { qos: 1 }); trOpened();
+  } else if (m.k === 'welcome' && tr.role === 'join' && m.to === tr.id && !tr.peer){ tr.peer = m.id; trOpened(); }
+  else if (tr.peer && m.id === tr.peer && m.to === tr.id){ if (m.k === 'bye') trDropped(); else trGot(m); }
+  else if (tr.peer && m.id === tr.peer && m.k === 'bye') trDropped();
+}
+function trClean(list){
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, TR_MAX).map(x => {
+    const it = D.items[x && x.id]; if (!it || !it.wears.includes(x.wear)) return null;
+    const f = +x.float; if (!(f >= it.min_float - 1e-9 && f <= it.max_float + 1e-9)) return null;
+    return { id: it.id, float: f, wear: wearOf(f) === x.wear ? x.wear : wearOf(f), stattrak: !!(x.stattrak && it.stattrak), free: !!x.free, case: String(x.case || '').slice(0, 40) };
+  }).filter(Boolean);
+}
+function trCleanKeys(o){
+  const out = {}; if (!o || typeof o !== 'object') return out;
+  Object.keys(o).slice(0, 40).forEach(id => { const n = Math.floor(+o[id]); if (keyInfo[id] && n >= 1 && n <= 9999) out[id] = n; });
+  return out;
+}
+const trKeySig = o => Object.keys(o).sort().map(id => `k:${id}:${o[id]}`).join(',');
+const trKeyList = o => Object.keys(o).filter(id => keyInfo[id] && o[id] > 0);
+const trKeyValue = o => trKeyList(o).reduce((s, id) => s + keyInfo[id].price * o[id], 0);
+const trSig = i => `${i.id}:${(+i.float).toFixed(6)}:${i.stattrak ? 1 : 0}:${i.free ? 1 : 0}`;
+function trMineItems(){ return tr.mine.map(u => inventory.find(i => i.uid === u)).filter(i => i && D.items[i.id]); }
+const trTerms = () => { const m = trMineItems().map(trSig).sort().join(',') + '|' + trKeySig(tr.mineKeys), t = tr.theirs.map(trSig).sort().join(',') + '|' + trKeySig(tr.theirKeys); return tr.role === 'host' ? m + '#' + t : t + '#' + m; };
+function trGot(m){
+  if (!tr) return;
+  if (m.k === 'offer'){ tr.theirs = trClean(m.items); tr.theirKeys = trCleanKeys(m.keys); tr.theirReady = false; tr.myReady = false; renderTrade(); }
+  else if (m.k === 'ready'){ tr.theirReady = !!m.on && m.h === trTerms(); renderTrade(); trTryDone(); }
+}
+function trTryDone(){
+  if (!tr || !tr.myReady || !tr.theirReady) return;
+  const mine = trMineItems(), gone = new Set(mine.map(i => i.uid));
+  if (mine.length !== tr.mine.length) return;                                     // something I offered is gone: don't trade
+  if (trKeyList(tr.mineKeys).some(id => keyCount(id) < tr.mineKeys[id])) return;   // keys I offered are gone: don't trade
+  trKeyList(tr.mineKeys).forEach(id => { wallet.keys[id] = keyCount(id) - tr.mineKeys[id]; });
+  trKeyList(tr.theirKeys).forEach(id => { wallet.keys[id] = keyCount(id) + tr.theirKeys[id]; });
+  saveWallet();
+  inventory = inventory.filter(i => !gone.has(i.uid));
+  tr.theirs.forEach(x => inventory.unshift({ id: x.id, float: x.float, wear: x.wear, stattrak: x.stattrak, t: Date.now(), uid: Math.random().toString(36).slice(2) + Date.now().toString(36), free: x.free, case: 'Trade' }));
+  saveInv(); renderInventory(); refreshEconomy();
+  tr.mine = []; tr.theirs = []; tr.mineKeys = {}; tr.theirKeys = {}; tr.myReady = tr.theirReady = false; trSend({ k: 'offer', items: [], keys: {} });
+  stat('trades'); upBeep(true); renderTrade(); $('trStatus').innerHTML = '<span class="trok">Trade complete</span>';
+}
+function trOfferChanged(){
+  tr.myReady = false; tr.theirReady = false;
+  trSend({ k: 'offer', items: trMineItems().map(i => ({ id: i.id, float: i.float, wear: i.wear, stattrak: i.stattrak, free: i.free, case: i.case })), keys: tr.mineKeys });
+  renderTrade();
+}
+let trQuery = '', trSortBy = 'value';
+function trCard(i, picked){ const it = D.items[i.id]; return `<div class="icard${picked ? ' pick' : ''}${i.locked ? ' locked' : ''}${i.vault ? ' vault' : ''}" data-uid="${i.uid || ''}" style="--c:${it.color}" title="${it.name} (${i.wear})">
+  <div class="top">${i.locked ? LOCK_SVG : ''}${i.stattrak ? '<span class="st">StatTrak™</span>' : ''}<span class="wr">${WEAR_SHORT[i.wear] || ''}</span></div>${itemImg(it, false, i.wear)}<div class="wn">${it.weapon}</div><div class="sn">${it.pattern || it.name.replace(/^★ /, '')}</div><div class="pr">${money(sellPrice(it, i.float, i.stattrak, i.free))}</div></div>`; }
+function renderTrade(){
+  if (!D) return;
+  const live = !!(tr && tr.open);
+  $('trConnect').style.display = live ? 'none' : ''; $('trLive').style.display = live ? '' : 'none';
+  if (!live) return;
+  tr.mine = tr.mine.filter(u => inventory.some(i => i.uid === u));
+  Object.keys(tr.mineKeys).forEach(id => { const n = Math.min(tr.mineKeys[id], keyCount(id)); if (n > 0) tr.mineKeys[id] = n; else delete tr.mineKeys[id]; });
+  const mine = trMineItems(), vm = mine.reduce((s, i) => s + valueOf(i), 0), vt = tr.theirs.reduce((s, x) => s + sellPrice(D.items[x.id], x.float, x.stattrak, x.free), 0);
+  const kc = (id, n, left) => `<div class="icard kc" data-key="${id}" style="--c:#8f8c9e" title="${keyInfo[id].name}"><div class="top"><span class="wr">×${n}</span></div><img src="${keyInfo[id].image}" alt=""><div class="wn">Key</div><div class="sn">${keyInfo[id].name.replace(/ Key$/, '')}</div><div class="pr">${money(keyInfo[id].price)}${left === undefined ? '' : ' · ' + left + ' left'}</div></div>`;
+  const km = trKeyList(tr.mineKeys), kt = trKeyList(tr.theirKeys), vmk = trKeyValue(tr.mineKeys), vtk = trKeyValue(tr.theirKeys);
+  $('trMine').innerHTML = mine.map(i => trCard(i, false)).join('') + km.map(id => kc(id, tr.mineKeys[id])).join(''); $('trMineSum').innerHTML = mine.length || km.length ? `<b>${money(vm + vmk)}</b>` : '';
+  $('trTheirs').innerHTML = tr.theirs.map(x => trCard(x, false)).join('') + kt.map(id => kc(id, tr.theirKeys[id])).join(''); $('trTheirSum').innerHTML = tr.theirs.length || kt.length ? `<b>${money(vt + vtk)}</b>` : '';
+  const ownKeys = Object.keys(keyInfo).filter(id => keyCount(id) - (tr.mineKeys[id] || 0) > 0);
+  $('trKeys').innerHTML = ownKeys.map(id => kc(id, keyCount(id) - (tr.mineKeys[id] || 0), undefined)).join(''); $('trKeys').style.display = ownKeys.length ? '' : 'none';
+  $('trStatus').innerHTML = tr.theirReady ? '<span class="trok">They confirmed</span>' : 'Connected';
+  $('trConfirm').disabled = !mine.length && !tr.theirs.length && !km.length && !kt.length; $('trConfirm').textContent = tr.myReady ? 'Waiting for them' : 'Confirm'; $('trConfirm').classList.toggle('on', tr.myReady);
+  const q = trQuery.trim().toLowerCase(); let inv = withVault().filter(i => D.items[i.id] && !tr.mine.includes(i.uid) && (!q || (D.items[i.id].name + ' ' + i.wear).toLowerCase().includes(q)));
+  if (trSortBy === 'value') inv = [...inv].sort((a, b) => valueOf(b) - valueOf(a)); else if (trSortBy === 'low') inv = [...inv].sort((a, b) => valueOf(a) - valueOf(b));
+  $('trInv').innerHTML = inv.map(i => trCard(i, false)).join('') || '<div class="empty" style="grid-column:1/-1;padding:16px 0;color:#8f8c9e">Nothing left to offer.</div>';
+}
+function trStart(role, code, onReady){
+  if (typeof mqtt === 'undefined'){ trMsg('The trading library could not be loaded. Check your connection.', true); return null; }
+  trClose();
+  const id = Math.random().toString(36).slice(2, 10), topic = 'unboxd/trade/' + code;
+  const client = mqtt.connect((prefs.signal || '').trim() || TR_BROKER, { clientId: 'unboxd-' + id, protocolVersion: 5, clean: true, reconnectPeriod: 3000, connectTimeout: 8000,
+    will: { topic, payload: JSON.stringify({ id, k: 'bye' }), qos: 1 } });
+  const t = tr = { client, id, role, code, topic, peer: null, open: false, mine: [], theirs: [], mineKeys: {}, theirKeys: {}, myReady: false, theirReady: false };
+  let started = false;
+  client.on('connect', () => { if (started) return; started = true; client.subscribe([topic, topic + '/host'], { qos: 1 }, () => onReady && onReady(t)); });
+  client.on('message', (tp, buf) => { let m; try { m = JSON.parse(buf.toString() || 'null'); } catch { return; } if (tr === t) trRecv(tp, m); });
+  client.on('error', () => { if (tr === t && !t.open){ trClose(); renderTrade(); trMsg('Could not reach the trade server.', true); } });
+  return t;
+}
+function trHostNow(tries = 0){
+  const code = String(Math.floor(100000 + Math.random() * 900000)); trMsg('Getting a code...'); $('trCode').textContent = '';
+  trStart('host', code, t => setTimeout(() => {                                     // a marker already there means the code is taken: pick another
+    if (tr !== t) return;
+    if (t.taken && tries < 5){ trClose(); return trHostNow(tries + 1); }
+    t.client.publish(t.topic + '/host', JSON.stringify({ id: t.id, k: 'host' }), { retain: true, qos: 1, properties: { messageExpiryInterval: 1800 } });
+    $('trCode').textContent = code.slice(0, 3) + ' ' + code.slice(3); trMsg('Give your friend this code. They enter it on the Trade page.');
+  }, 900));
+}
+$('trHost').onclick = () => trHostNow();
+$('trJoin').onclick = () => {
+  const code = $('trJoinIn').value.replace(/\D/g, ''); if (code.length !== 6) return trMsg('The code is 6 numbers.', true);
+  trMsg('Connecting...');
+  trStart('join', code, t => {
+    setTimeout(() => { if (tr === t && !t.asked){ trClose(); renderTrade(); trMsg('No trade with that code.', true); } }, 2500);
+    setTimeout(() => { if (tr === t && !t.open){ trClose(); renderTrade(); trMsg('Nobody answered that code.', true); } }, 12000);
+  });
+};
+$('trLeave').onclick = () => { trClose(); renderTrade(); trMsg(''); $('trCode').textContent = ''; $('trJoinIn').value = ''; };
+$('trKeys').onclick = e => { const c = e.target.closest('[data-key]'); if (!c || !tr) return; const id = c.dataset.key; if ((tr.mineKeys[id] || 0) >= keyCount(id)) return; tr.mineKeys[id] = (tr.mineKeys[id] || 0) + 1; trOfferChanged(); };
+$('trInv').onclick = e => { const c = e.target.closest('.icard'); if (!c || !tr || tr.mine.length >= TR_MAX) return; if (c.classList.contains('locked')) return lockedMsg(c); tr.mine.push(c.dataset.uid); trOfferChanged(); };
+$('trMine').onclick = e => { const c = e.target.closest('.icard'); if (!c || !tr) return;
+  if (c.dataset.key){ const id = c.dataset.key; if (--tr.mineKeys[id] <= 0) delete tr.mineKeys[id]; return trOfferChanged(); } tr.mine = tr.mine.filter(u => u !== c.dataset.uid); trOfferChanged(); };
+$('trConfirm').onclick = () => { if (!tr) return; tr.myReady = !tr.myReady; trSend({ k: 'ready', on: tr.myReady, h: trTerms() }); renderTrade(); trTryDone(); };
+$('trSearch').oninput = e => { trQuery = e.target.value; renderTrade(); };
+$('trSort').onchange = e => { trSortBy = e.target.value; renderTrade(); };
+$('sigIn').value = prefs.signal || ''; $('sigIn').oninput = e => { prefs.signal = e.target.value.trim(); savePrefs(); };
+$('trJoinIn').onkeydown = e => { if (e.key === 'Enter') $('trJoin').click(); };
+
+// ---------------- bank ----------------
+// Put up to 4 skins in the vault and they earn a little money every hour. Earnings stop building after 4 hours, so you have to come
+// back and claim. Skins in the vault can't be sold, staked, merged or traded until you take them out. Putting one in or taking one out
+// pays you what has built up first.
+const BANK_SLOTS = 4, BANK_RATE = 0.05, BANK_CAP_H = 4;                 // 5% of the skins' value per hour
+const bank = () => (wallet.bank ||= { items: [], last: 0 });
+const bankMult = () => 1 + REB_BANK * rebLevel();
+const bankPerHour = () => bank().items.reduce((s, i) => s + (D.items[i.id] ? valueOf(i) : 0), 0) * BANK_RATE * bankMult();
+const bankHours = () => Math.min(BANK_CAP_H, (Date.now() - (bank().last || Date.now())) / 3600e3);
+const bankAccrued = () => bank().items.length ? Math.floor(bankPerHour() * bankHours()) : 0;
+function bankPay(){ const a = bankAccrued(); if (a > 0){ wallet.cents += a; stat('bankCents', a); } bank().last = Date.now(); return a; }
+function renderBank(){
+  if (!D) return;
+  const b = bank(), mine = b.items.filter(i => D.items[i.id]);
+  $('bkSlots').innerHTML = Array.from({ length: BANK_SLOTS }, (_, k) => { const i = mine[k], it = i && D.items[i.id];
+    return it ? `<div class="upcard" data-uid="${i.uid}" style="--c:${it.color}"><span class="lbl">In the vault</span>${itemImg(it, false, i.wear)}<div class="tn">${it.pattern || it.name.replace(/^★ /, '')}</div><div class="tw">${i.wear}</div><div class="pr">${money(valueOf(i))}</div></div>`
+      : `<div class="upcard empty"><span class="lbl">Empty</span><div class="tw">Pick a skin below</div></div>`; }).join('');
+  const acc = bankAccrued(), ph = bankPerHour(), left = Math.max(0, BANK_CAP_H - bankHours()), full = mine.length && left <= 0;
+  $('bkClaim').innerHTML = `<button id="bkGo" ${acc > 0 ? '' : 'disabled'}>Claim ${money(acc)}</button><div class="bkinfo">${mine.length ? `${money(ph)} an hour${full ? ', full' : `, full in ${dailyIn(left * 3600e3)}`}` : 'Nothing earning yet'}</div>`;
+  const q = bkQuery.trim().toLowerCase(), inVault = new Set(mine.map(i => i.uid));
+  let inv = inventory.filter(i => D.items[i.id] && !inVault.has(i.uid) && (!q || (D.items[i.id].name + ' ' + i.wear).toLowerCase().includes(q)));
+  inv = [...inv].sort(bkSort === 'low' ? (x, y) => valueOf(x) - valueOf(y) : (x, y) => valueOf(y) - valueOf(x));
+  $('bkInv').innerHTML = inv.length ? inv.map(i => { const it = D.items[i.id];
+    return `<div class="icard" data-uid="${i.uid}" style="--c:${it.color}" title="${it.name} (${i.wear})"><div class="top">${i.locked ? '<svg class="lk" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>' : ''}<span class="wr">${WEAR_SHORT[i.wear] || ''}</span></div>${itemImg(it, false, i.wear)}<div class="wn">${it.weapon}</div><div class="sn">${it.pattern || it.name}</div><div class="pr">${money(valueOf(i))}</div></div>`; }).join('')
+    : `<div class="empty" style="grid-column:1/-1;padding:20px 0;color:#8f8c9e">${inventory.length ? 'No skins match.' : 'You have no skins yet.'}</div>`;
+}
+let bkQuery = '', bkSort = 'value';
+$('bkInv').onclick = e => {
+  const c = e.target.closest('.icard'); if (!c) return; const b = bank();
+  if (b.items.length >= BANK_SLOTS) return toast('The vault is full. Take one out first.');
+  const n = inventory.findIndex(i => i.uid === c.dataset.uid); if (n < 0) return;
+  bankPay(); b.items.push(inventory.splice(n, 1)[0]); b.last = Date.now(); saveWallet(); saveInv(); renderInventory(); refreshEconomy(); renderBank();
+};
+$('bkSlots').onclick = e => {
+  const c = e.target.closest('.upcard[data-uid]'); if (!c) return; const b = bank(), n = b.items.findIndex(i => i.uid === c.dataset.uid); if (n < 0) return;
+  bankPay(); inventory.unshift(b.items.splice(n, 1)[0]); b.last = Date.now(); saveWallet(); saveInv(); renderInventory(); refreshEconomy(); renderBank();
+};
+$('bkClaim').onclick = e => { if (e.target.closest('#bkGo')){ const a = bankPay(); saveWallet(); refreshEconomy(); renderBank(); if (a > 0){ snd('coin', .7); } } };
+$('bkSearch').oninput = e => { bkQuery = e.target.value; renderBank(); };
+$('bkSort').onchange = e => { bkSort = e.target.value; renderBank(); };
+setInterval(() => { if ($('v-bank').classList.contains('on') && D && !document.querySelector('#dlg.show')){
+  const acc = bankAccrued(); const go = $('bkGo'); if (go){ go.textContent = 'Claim ' + money(acc); go.disabled = acc <= 0; } } }, 4000);
+const toast = m => { const t = document.createElement('div'); t.className = 'toastmsg'; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.classList.add('out'), 1800); setTimeout(() => t.remove(), 2300); };
+
+// ---------------- rebirth ----------------
+const moneyBig = c => '$' + Math.round(c / 100).toLocaleString('en-US');
+function renderRebirth(){
+  const lv = rebLevel(), next = REB_COST[lv], can = next != null && wallet.cents >= next;
+  const pct = x => (x * 100).toFixed(0) + '%';
+  $('rebirth').innerHTML = `<h3>Rebirth</h3>
+    <div class="rebnow"><div class="sttile"><b>${lv}<small> / ${REB_COST.length}</small></b><span>Rebirths</span></div>
+      <div class="sttile"><b>+${pct(REB_CASH * lv)}</b><span>More money from selling</span></div>
+      <div class="sttile"><b>+${pct(REB_BANK * lv)}</b><span>More from the bank</span></div>
+      <div class="sttile"><b>+${pct(REB_DAILY * lv)}</b><span>More daily reward</span></div></div>
+    <div class="reb-steps">${REB_COST.map((c, i) => `<div class="rs${i < lv ? ' done' : i === lv ? ' next' : ''}"><span>${i + 1}</span><b>${moneyBig(c)}</b></div>`).join('')}</div>
+    ${next != null ? `<button id="rebGo" ${can ? '' : 'disabled'}>Rebirth for ${moneyBig(next)}</button>` : '<div class="rebmax">Fully reborn</div>'}`;
+}
+$('rebirth').onclick = async e => {
+  if (!e.target.closest('#rebGo')) return; const lv = rebLevel(), cost = REB_COST[lv]; if (cost == null || wallet.cents < cost) return;
+  if (!await askConfirm(`Pay <b>${moneyBig(cost)}</b> to rebirth?<small>You keep your skins and keys. The bonuses are permanent.</small>`, { ok: 'Rebirth' })) return;
+  if (wallet.cents < cost) return;
+  wallet.cents -= cost; wallet.reb = lv + 1; saveWallet(); refreshEconomy(); renderRebirth(); upBeep(true);
+};
+
+// ---------------- stats page ----------------
+const tile = (n, label, cls = '') => `<div class="sttile ${cls}"><b>${n}</b><span>${label}</span></div>`;
+function renderStats(){
+  if (!D) return;
+  const s = stats, net = s.soldCents - s.keysSpent, held = inventory.reduce((t, i) => t + (D.items[i.id] ? valueOf(i) : 0), 0);
+  $('stTop').innerHTML = tile(s.opened, 'Cases opened') + tile(s.keysUsed, 'Keys used') + tile(money(s.keysSpent), 'Spent on keys') + tile(money(s.soldCents), 'Earned from selling')
+    + tile((net < 0 ? '-' : '') + money(Math.abs(net)), 'Selling minus keys', net >= 0 ? 'up' : 'down') + tile(money(held), 'Inventory value');
+  const total = D.rarities.reduce((t, r) => t + (s.rarity[r.name] || 0), 0);
+  $('stRarity').innerHTML = D.rarities.map(r => { const n = s.rarity[r.name] || 0, pct = total ? n / total * 100 : 0;
+    return `<div class="strow"><span class="nm" style="--c:${r.color}">${RARITY_LABEL[r.name] || r.name}</span><div class="bar"><i style="width:${Math.max(pct, n ? 2 : 0)}%;background:${r.color}"></i></div><b>${n}</b></div>`; }).join('');
+  const b = s.best, bi = b && D.items[b.id];
+  $('stBest').innerHTML = bi ? `<div class="stbest" style="--c:${bi.color}">${itemImg(bi, false, b.wear)}<div class="tn">${b.stattrak ? '<span class="st">StatTrak™</span> ' : ''}${bi.pattern ? bi.weapon + ' | ' + bi.pattern : bi.name}</div><div class="tw">${b.wear}</div><div class="pr">${money(b.value)}</div></div>` : '<div class="stnone">Open a case</div>';
+  const rate = s.upN ? Math.round(s.upWin / s.upN * 100) + '%' : '-';
+  $('stMore').innerHTML = tile(s.upN, 'Upgrades') + tile(rate, 'Upgrade win rate') + tile(money(s.upStaked), 'Staked in upgrades') + tile(money(s.upWonCents), 'Won from upgrades')
+    + tile(s.merges, 'Merges') + tile(s.trades, 'Trades') + tile(s.dailyN, 'Daily rewards') + tile(s.soldN, 'Skins sold');
+}
+$('stReset').onclick = async () => {
+  if (!await askConfirm('Reset your stats?<small>Your skins, keys and money are not touched.</small>', { ok: 'Reset', danger: true })) return;
+  Object.assign(stats, { since: Date.now(), opened: 0, keysUsed: 0, keysBought: 0, keysSpent: 0, soldN: 0, soldCents: 0, rarity: {}, best: null, upN: 0, upWin: 0, upStaked: 0, upWonCents: 0, merges: 0, trades: 0, dailyN: 0, dailyCents: 0 });
+  saveStats(); renderStats();
+};
+
+// a result saved by a spin that was cut short is applied the next time the game opens
+function resumeUpgrade(){
+  try { const res = JSON.parse(localStorage.getItem(UP_KEY) || 'null'); if (res && D.items[res.id]) finishUpgrade(res); else localStorage.removeItem(UP_KEY); } catch { localStorage.removeItem(UP_KEY); }
+}
+
+// ---------------- wiring ----------------
+// sidebar: which part of the page is showing (kept in the address as #inventory etc., and remembered)
+const VIEWS = ['open', 'keys', 'contents', 'inventory', 'upgrader', 'merge', 'stats', 'bank', 'rebirth', 'trade', 'settings', 'item'];
+let itemFrom = 'contents', itemShown = false, itemScroll = 0;
+function showView(name){
+  if (!VIEWS.includes(name) || (name === 'item' && !itemShown)) name = 'open';
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + name));
+  document.querySelectorAll('.nav').forEach(n => n.classList.toggle('on', n.dataset.view === (name === 'item' ? itemFrom : name)));
+  if (name === 'upgrader') renderUpgrader();
+  if (name === 'merge') renderMerge();
+  if (name === 'trade') renderTrade();
+  if (name === 'stats') renderStats();
+  if (name === 'bank') renderBank();
+  if (name === 'rebirth') renderRebirth();
+  try { localStorage.setItem('unboxd.view', name === 'item' ? itemFrom : name); } catch {}
+  if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('.nav[data-view]').forEach(n => { n.onclick = () => showView(n.dataset.view); });
+
+// ---- an item gets a page of its own: a big picture, the conditions to pick between, the price. Back returns to where you were. ----
+function openItemPage(from){ itemFrom = from; itemScroll = window.scrollY; itemShown = true; showView('item'); }
+function closeItemPage(){ itemShown = false; showView(itemFrom); window.scrollTo(0, itemScroll); }
+$('itBack').onclick = closeItemPage;
+addEventListener('keydown', e => { if (e.key === 'Escape' && $('v-item').classList.contains('on') && !$('result').classList.contains('show')) closeItemPage(); });
+const priceSpan = (it, wear, st) => { const r = wearFloatRange(it, wear); if (!r) return ''; const a = priceOf(it, r[1], st), b = priceOf(it, r[0], st); return a === b ? money(a) : money(a) + ' - ' + money(b); };
+
+// the weapon fades and floats in once its picture is ready, so it never pops
+function itReveal(){
+  const img = $('itPage').querySelector('.big img'); if (!img) return;
+  img.classList.remove('in'); (img.decode ? img.decode() : Promise.resolve()).catch(() => {}).then(() => requestAnimationFrame(() => img.classList.add('in')));
+}
+function showCaseItem(id){                     // from the Contents tab: what it is, its odds, and each condition
+  const it = D.items[id], st = { on: false };
+  const pool = poolFor(cur), tiers = D.rarities.filter(r => pool[r.name].length), total = tiers.reduce((s, r) => s + r.odds, 0);
+  const tier = tiers.find(r => r.name === (cur.rare.includes(id) ? 'Rare Special Item' : it.rarity)), chance = tier.odds / total / pool[tier.name].length * 100;
+  let wear = it.wears[Math.min(it.wears.length - 1, Math.floor(it.wears.length / 2))];
+  const draw = () => {
+    $('itPage').style.setProperty('--c', it.color);
+    $('itPage').innerHTML = `<div class="big">${itemImg(it, false, wear)}</div>
+      <div class="side"><div><div class="w">${it.weapon}</div><div class="n">${it.pattern || it.name.replace(/^★ /, '')}</div><div class="r">${it.rarity}</div></div>
+        <div class="conds">${it.wears.map(w => `<button class="cond${w === wear ? ' on' : ''}" data-w="${w}"><span>${w}</span><b>${priceSpan(it, w, false)}</b></button>`).join('')}</div>
+        <div class="facts"><div class="row"><span>Chance</span><b>${chance < 0.01 ? chance.toFixed(4) : chance.toFixed(2)}%</b></div>${it.stattrak ? `<div class="row" style="margin-top:6px"><span>StatTrak™</span><b>1 in 10</b></div>` : ''}</div></div>`;
+    $('itPage').querySelectorAll('[data-w]').forEach(b => b.onclick = () => { wear = b.dataset.w; const big = $('itPage').querySelector('.big'); big.innerHTML = itemImg(it, false, wear); itReveal(); $('itPage').querySelectorAll('.cond').forEach(c => c.classList.toggle('on', c.dataset.w === wear)); });
+  };
+  draw(); itReveal(); openItemPage('contents');
+}
+function showOwnedItem(uid){                   // from the inventory: yours, in its condition, with the sell button
+  const i = inventory.find(x => x.uid === uid), it = i && D.items[i.id]; if (!it) return;
+  $('itPage').style.setProperty('--c', it.color);
+  $('itPage').innerHTML = `<div class="big">${itemImg(it, false, i.wear)}</div>
+    <div class="side"><div><div class="w">${it.weapon}</div><div class="n">${i.stattrak ? '<span class="st">StatTrak™</span> ' : ''}${it.pattern || it.name.replace(/^★ /, '')}</div><div class="r">${it.rarity}</div></div>
+      <div class="row"><span>Condition</span><b>${i.wear}</b></div>
+      <div class="price">${money(valueOf(i))}</div>
+      <div class="btnrow"><button class="lockbtn" id="itLock"></button><button class="sell" id="itSell">Sell</button></div></div>`;
+  const paint = () => { $('itLock').textContent = i.locked ? 'Unlock' : 'Lock'; $('itSell').disabled = !!i.locked; $('itSell').textContent = i.locked ? 'Locked' : 'Sell'; };
+  paint();
+  $('itLock').onclick = () => { i.locked = !i.locked; if (!i.locked) delete i.locked; saveInv(); renderInventory(); paint(); };
+  $('itSell').onclick = () => { if (i.locked) return; sellByUid(uid); closeItemPage(); };
+  itReveal(); openItemPage('inventory');
+}
+// the rail opens over the page while a spin runs, and pushes the page aside the rest of the time
+const sideEl = $('side'), wide = matchMedia('(min-width:701px)');
+const openSide = () => { if (!busy && wide.matches) document.body.classList.add('sideOpen'); };
+const closeSide = () => document.body.classList.remove('sideOpen');
+sideEl.addEventListener('mouseenter', openSide); sideEl.addEventListener('mouseleave', closeSide);
+// keyboard focus keeps the rail open, but a button you merely clicked with the mouse does not
+sideEl.addEventListener('focusin', e => { if (e.target.matches(':focus-visible')){ sideEl.classList.add('kbd'); openSide(); } });
+sideEl.addEventListener('focusout', () => { sideEl.classList.remove('kbd'); if (!sideEl.matches(':hover')) closeSide(); });
+addEventListener('hashchange', () => showView(location.hash.slice(1)));
+let startView = location.hash.slice(1); try { startView = startView || localStorage.getItem('unboxd.view') || 'open'; } catch {}
+showView(startView);
+$('open').onclick = () => open();
+$('mute').onclick = () => { muted = !muted; $('mute').classList.toggle('on', !muted); };
+$('tgSell').onclick = () => { prefs.autoSell = !prefs.autoSell; savePrefs(); renderPrefs(); };
+$('tgRoll').onclick = $('swRoll').onclick = () => { prefs.roll = !prefs.roll; if (!prefs.roll) loopOn = false; savePrefs(); renderPrefs(); refreshEconomy(); };
+$('swStat').onclick = () => { prefs.keepStatTrak = !prefs.keepStatTrak; savePrefs(); renderPrefs(); };
+$('sellRarities').onclick = e => { const b = e.target.closest('[data-r]'); if (!b) return; prefs.sellRarities[b.dataset.r] = !prefs.sellRarities[b.dataset.r]; savePrefs(); renderPrefs(); };
+$('keepAbove').oninput = e => { prefs.keepAbove = Math.max(0, Math.round((parseFloat(e.target.value) || 0) * 100)); savePrefs(); };
+$('keysGrid').onclick = e => {
+  const s = e.target.closest('[data-step]'), b = e.target.closest('[data-buy]');
+  if (s && !s.disabled){ keyQty[s.dataset.k] = Math.max(1, Math.min(KEY_MAX, (keyQty[s.dataset.k] || 1) + +s.dataset.step)); renderKeys(); }
+  else if (b && !b.disabled){ buyKeys(b.dataset.buy, Math.max(1, keyQty[b.dataset.buy] || 1)); }
+};
+$('keySearch').oninput = e => { keyQuery = e.target.value; renderKeys(); };
+$('keySort').onchange = e => { keySort = e.target.value; renderKeys(); };
+$('keysFilters').onclick = e => { const c = e.target.closest('.chip'); if (c){ keyFilter = c.dataset.f; renderKeys(); } };
+// a confirm box in the game's own style: resolves true on OK / Enter, false on Cancel / Esc / a click outside
+function askConfirm(html, { ok = 'OK', danger = false, cancel = 'Cancel', single = false, wide = false } = {}){
+  return new Promise(res => {
+    const dlg = $('dlg'), yes = $('dlgYes'), no = $('dlgNo'); $('dlgText').innerHTML = html; yes.textContent = ok; yes.classList.toggle('danger', danger); no.textContent = cancel; no.style.display = single ? 'none' : ''; $('dlgBox').classList.toggle('wide', wide);
+    dlg.classList.remove('out'); dlg.classList.add('show'); dlg.setAttribute('aria-hidden', 'false'); yes.focus();
+    const done = v => { dlg.classList.remove('show'); dlg.classList.add('out'); setTimeout(() => dlg.classList.remove('out'), 150); dlg.setAttribute('aria-hidden', 'true'); cleanup(); res(v); };
+    const key = e => { if (e.key === 'Escape'){ e.preventDefault(); done(false); } else if (e.key === 'Enter' && document.activeElement !== no){ e.preventDefault(); done(true); } };
+    const outside = e => { if (e.target === dlg) done(false); };
+    const cleanup = () => { removeEventListener('keydown', key, true); dlg.removeEventListener('pointerdown', outside); yes.onclick = no.onclick = null; };
+    addEventListener('keydown', key, true); dlg.addEventListener('pointerdown', outside); yes.onclick = () => done(true); no.onclick = () => done(false);
+  });
+}
+$('sellAll').onclick = async () => {
+  const open = inventory.filter(i => !i.locked), kept = inventory.length - open.length, v = payout(open.reduce((s, i) => s + (D.items[i.id] ? valueOf(i) : 0), 0));
+  if (!open.length) return askConfirm(kept ? 'Everything you have is locked.<small>Unlock a skin on its page to sell it.</small>' : 'Nothing to sell.', { ok: 'OK' });
+  if (await askConfirm(`Sell ${open.length} skin${open.length === 1 ? '' : 's'} for <b>${money(v)}</b>?${kept ? `<small>${kept} locked skin${kept === 1 ? ' stays' : 's stay'} in your inventory.</small>` : ''}`, { ok: 'Sell' })) sellMany(open);
+};
+$('clear').onclick = async () => {
+  const kept = inventory.filter(i => i.locked).length;
+  if (await askConfirm(`Clear your inventory?<small>This removes every unlocked skin and gives you nothing back.${kept ? ` ${kept} locked skin${kept === 1 ? ' stays' : 's stay'}.` : ''}</small>`, { ok: 'Clear', danger: true })){ inventory = inventory.filter(i => i.locked); saveInv(); renderInventory(); $('opened').textContent = ''; }
+};
+addEventListener('keydown', e => { if (e.key === 'Escape') closeResult(); });
+$('result').onclick = e => { if (e.target.id === 'result') closeResult(); };
+$('contents').onclick = e => {
+  if (e.target.closest('[data-more]')){ ctRareAll = true; renderContents(); return; }
+  const c = e.target.closest('.icard'); if (c) showCaseItem(c.dataset.id);
+};
+$('ctCase').onchange = e => selectCase(e.target.value);
+$('ctOpen').onclick = () => showView('open');
+$('upGo').onclick = doUpgrade;
+$('upMine').onclick = e => { const c = e.target.closest('.icard'); if (!c || upBusy) return; if (c.classList.contains('locked')) return lockedMsg(c); const u = c.dataset.uid; upSel.has(u) ? upSel.delete(u) : upSel.add(u); if (upTarget && upTarget.price <= upStakeValue()) upTarget = null; renderUpgrader(); };
+$('upTargets').onclick = e => { const c = e.target.closest('[data-t]'); if (!c || upBusy) return; const [id, wear] = c.dataset.t.split('|'); pickTarget(id, wear); };
+$('upMults').onclick = e => {
+  const b = e.target.closest('[data-m]'); if (!b || upBusy) return;
+  const stake = upStakeValue(), want = stake * +b.dataset.m, pool = targetPool(); let best = null;
+  pool.forEach(t => { if (t.price > stake && (!best || Math.abs(t.price - want) < Math.abs(best.price - want))) best = t; });
+  if (best){ upTarget = best; renderUpgrader(); }
+};
+$('upSearch').oninput = e => { upQuery.mine = e.target.value; renderUpgrader(); };
+$('upTSearch').oninput = e => { upQuery.targets = e.target.value; renderUpgrader(); };
+$('upSort').onchange = renderUpgrader; $('upTSort').onchange = renderUpgrader;
+$('upClear').onclick = () => { if (!upBusy){ upSel.clear(); upTarget = null; renderUpgrader(); } };
+$('caseSearch').oninput = e => { caseQuery = e.target.value; renderCases(); };
+$('caseSort').onchange = e => { caseSort = e.target.value; renderCases(); };
+$('invGrid').onclick = e => { const c = e.target.closest('.icard'); if (c) showOwnedItem(c.dataset.uid); };
+$('invFilters').onclick = e => { const b = e.target.closest('[data-f]'); if (b){ invFilter = b.dataset.f; renderInventory(); } };
+$('invSearch').oninput = e => { invQuery = e.target.value; renderInventory(); };
+$('invSort').onchange = e => { invSort = e.target.value; renderInventory(); };
+
+function setLoad(msg, frac, sub){
+  $('loadMsg').textContent = msg; $('loadBar').style.width = Math.round((frac ?? 0) * 100) + '%'; $('loadSub').textContent = sub || '';
+}
+
+// an item's picture (strip tiles load eagerly and decode off the main thread: lazy images in a moving strip were decoded while it spun)
+const itemImg = (it, eager, wear) => `<img src="${itemSrc(it, wear)}" data-id="${it.id}" ${eager ? 'decoding="async"' : 'loading="lazy"'} alt="">`;
+
+$('loadSkip').style.display = 'none';
+
+// ---- our own dropdowns instead of the browser's: same <select> underneath (so value / change keep working), a styled list on top ----
+function enhanceSelect(sel){
+  const wrap = document.createElement('div'); wrap.className = 'dd' + (sel.id ? ' dd-' + sel.id : '');
+  sel.parentNode.insertBefore(wrap, sel); wrap.appendChild(sel); sel.classList.add('dd-native'); sel.tabIndex = -1;
+  const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'dd-btn';
+  btn.innerHTML = '<span></span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>';
+  const pop = document.createElement('div'); pop.className = 'dd-pop';
+  wrap.append(btn, pop);
+  const sync = () => { btn.firstChild.textContent = sel.selectedOptions[0]?.textContent || ''; };
+  sel.ddSync = sync; sel.addEventListener('change', sync); sync();
+  let q = null;
+  const fill = (filter = '') => {
+    const list = pop.querySelector('.dd-list') || pop.appendChild(Object.assign(document.createElement('div'), { className: 'dd-list' }));
+    list.innerHTML = [...sel.options].filter(o => o.textContent.toLowerCase().includes(filter.toLowerCase()))
+      .map(o => `<button type="button" class="dd-opt${o.value === sel.value ? ' on' : ''}" data-v="${o.value}">${o.textContent}</button>`).join('') || '<div class="dd-none">No match</div>';
+  };
+  const close = () => { wrap.classList.remove('open'); };
+  const open = () => {
+    document.querySelectorAll('.dd.open').forEach(d => d !== wrap && d.classList.remove('open'));
+    sync();
+    if (sel.options.length > 12){
+      if (!q){ q = document.createElement('input'); q.type = 'search'; q.placeholder = 'Search'; q.className = 'dd-q'; pop.prepend(q); q.oninput = () => fill(q.value); }
+      q.value = '';
+    }
+    fill(); wrap.classList.add('open'); pop.style.left = pop.style.right = '';
+    const r = pop.getBoundingClientRect(); if (r.right > innerWidth - 8) { pop.style.left = 'auto'; pop.style.right = '0'; }
+    pop.querySelector('.dd-opt.on')?.scrollIntoView({ block: 'nearest' }); q?.focus({ preventScroll: true });
+  };
+  btn.onclick = () => wrap.classList.contains('open') ? close() : open();
+  pop.onclick = e => {
+    const o = e.target.closest('.dd-opt'); if (!o) return;
+    sel.value = o.dataset.v; sync(); close(); sel.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  wrap.addEventListener('keydown', e => {
+    if (e.key === 'Escape'){ close(); btn.focus(); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      const items = [...pop.querySelectorAll('.dd-opt')]; if (!items.length || !wrap.classList.contains('open')) return;
+      e.preventDefault(); const i = items.indexOf(document.activeElement); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+    }
+  });
+}
+document.querySelectorAll('select').forEach(enhanceSelect);
+addEventListener('pointerdown', e => { if (!e.target.closest('.dd')) document.querySelectorAll('.dd.open').forEach(d => d.classList.remove('open')); });
+
+setLoad('Loading cases...', 0.5);
+fetch('data/items.json', { cache: 'no-cache' }).then(r => r.json()).then(async d => {
+  D = d; d.cases.forEach(c => caseById[c.id] = c); d.rarities.forEach(r => rarityByName[r.name] = r);
+  WEARIMG = await fetch('data/wear_images.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
+  KEYS = await fetch('data/keys.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : []).catch(() => []);
+  PRICES = await fetch('data/prices.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null);
+  computeCases(); renderPrefs(); resumeUpgrade(); resumeMerge(); renderCases(); renderInventory(); refreshEconomy();
+  renderUpgrader(); renderMerge(); renderBank(); renderRebirth(); renderStats(); renderTrade();            // (the page may have opened straight on one of these)
+  if (inventory.length) $('opened').textContent = `${inventory.length} opened`;
+  selectCase(d.cases[d.cases.length - 1].id);   // newest case first
+  $('loading').classList.add('done');
+  window.unboxd = { rollDrop, poolFor, get data(){ return D; }, get current(){ return cur; }, select: selectCase };   // for testing in the console
+}).catch(e => { $('loadMsg').textContent = 'Could not load data/items.json. Serve this folder over http (e.g. python -m http.server).'; $('loadBar').style.width = '0'; console.error(e); });
+</script>
+</body>
+</html>
